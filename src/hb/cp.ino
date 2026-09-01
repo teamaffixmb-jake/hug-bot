@@ -36,8 +36,6 @@ constexpr const char *k_probe_paths[] = {
 sta::scan_ap_t networks[k_max_networks];
 size_t network_count = 0;
 const char *page_status = nullptr;
-constexpr char k_scanning[] = "Scanning for networks…";
-bool scan_pending = false;
 bool routes_bound = false;
 bool sta_connecting = false;
 bool hosting = false;
@@ -97,27 +95,8 @@ void handle_captive_probe() {
   send_location_replace(String("http://") + WiFi.softAPIP().toString() + "/");
 }
 
-void request_scan() {
-  scan_pending = true;
-  page_status = k_scanning;
-  sta::start_scan();
-}
-
-void poll_scan() {
-  if (!scan_pending) {
-    return;
-  }
-  if (sta::scan_ready()) {
-    network_count = sta::take_scan(networks, k_max_networks);
-    scan_pending = false;
-    if (page_status == k_scanning) {
-      page_status = nullptr;
-    }
-    return;
-  }
-  if (!sta::scan_running()) {
-    sta::start_scan();
-  }
+void scan_networks() {
+  network_count = sta::scan(networks, k_max_networks);
 }
 
 enum class tab_t { home, wifi, volume, logs, about };
@@ -188,8 +167,7 @@ void append_wifi_panel(String &html) {
       "<label>Network<select name=\"ssid\">");
 
   if (network_count == 0) {
-    html += scan_pending ? F("<option value=\"\">Scanning…</option>")
-                         : F("<option value=\"\">No networks found</option>");
+    html += F("<option value=\"\">No networks found</option>");
   }
   for (size_t i = 0; i < network_count; ++i) {
     html += F("<option value=\"");
@@ -262,8 +240,8 @@ void send_portal_page() {
       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
       "<script>(function(){var h=\"");
   html += WiFi.softAPIP().toString();
-  html += F("\";if(location.host!==h)location.replace(\"http://\"+h+\"/\""
-            "+location.search);})()</script>");
+  html += F("\";if(location.host!==h)location.replace(\"http://\"+h"
+            "+location.pathname+location.search);})()</script>");
   if (sta_connecting) {
     html += F(
         "<script>setTimeout(function(){location.replace('/?tab=wifi')},1000)"
@@ -272,16 +250,6 @@ void send_portal_page() {
     html += F(
         "<script>setTimeout(function(){location.replace('/?tab=logs')},2000)"
         "</script>");
-  } else if (parse_tab() == tab_t::wifi && scan_pending) {
-    html += F(
-        "<script>(function(){var live=true;"
-        "addEventListener('pagehide',function(){live=false});"
-        "function p(){if(!live)return;fetch('/scan-status')"
-        ".then(function(r){return r.text()}).then(function(t){"
-        "if(!live)return;if(t.indexOf('done')===0)"
-        "location.replace('/?tab=wifi');else setTimeout(p,400)})"
-        ".catch(function(){if(live)setTimeout(p,400)});"
-        "}setTimeout(p,400)})()</script>");
   }
   html += F(
       "<title>Hug-Bot</title>"
@@ -323,6 +291,15 @@ void send_portal_page() {
       ".dedication { font-size: 1.15rem; margin: 2rem 0; }"
       ".heart { color: #e03131; }"
       "</style></head><body><main><h1>Hug-Bot <span class=\"heart\">♥</span></h1>");
+
+  if (http_server.uri() == "/refresh") {
+    html += F("<p class=\"lede\">Scanning for networks…</p>"
+              "<script>location.replace('/scan')</script>"
+              "</main></body></html>");
+    send_no_cache_headers();
+    http_server.send(200, "text/html", html);
+    return;
+  }
 
   if (sta_connecting) {
     html += F("<p class=\"lede\">Connecting. This page will update when "
@@ -445,13 +422,13 @@ void handle_disconnect() {
 }
 
 void handle_refresh() {
-  request_scan();
-  send_location_replace("/?tab=wifi");
+  send_portal_page();
 }
 
-void handle_scan_status() {
-  send_no_cache_headers();
-  http_server.send(200, "text/plain", scan_pending ? "running" : "done");
+void handle_scan() {
+  scan_networks();
+  page_status = nullptr;
+  send_location_replace("/?tab=wifi");
 }
 
 void handle_volume() {
@@ -485,7 +462,7 @@ void bind_routes() {
   http_server.on("/disconnect", HTTP_POST, handle_disconnect);
   http_server.on("/volume", HTTP_POST, handle_volume);
   http_server.on("/refresh", handle_refresh);
-  http_server.on("/scan-status", handle_scan_status);
+  http_server.on("/scan", handle_scan);
   http_server.onNotFound(handle_captive_probe);
   routes_bound = true;
 }
@@ -502,7 +479,6 @@ void loop() {
     return;
   }
   pump();
-  poll_scan();
 }
 
 void enable() {
@@ -510,7 +486,7 @@ void enable() {
     return;
   }
   start_control_ap();
-  request_scan();
+  scan_networks();
 }
 
 void disable() {
