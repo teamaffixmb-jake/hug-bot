@@ -36,8 +36,11 @@ constexpr const char *k_probe_paths[] = {
 sta::scan_ap_t networks[k_max_networks];
 size_t network_count = 0;
 const char *page_status = nullptr;
+constexpr char k_scanning[] = "Scanning for networks…";
+bool scan_pending = false;
 bool routes_bound = false;
 bool sta_connecting = false;
+bool hosting = false;
 
 DNSServer dns_server;
 WebServer http_server(k_http_port);
@@ -78,8 +81,43 @@ void send_no_cache_headers() {
   http_server.sendHeader("Expires", "-1");
 }
 
-void scan_networks() {
-  network_count = sta::scan(networks, k_max_networks);
+// 302/meta-refresh leave extra history entries, so Back looks broken.
+void send_location_replace(const String &url) {
+  String html;
+  html.reserve(192);
+  html += F("<!DOCTYPE html><html><head><meta charset=\"UTF-8\">"
+            "<script>location.replace(\"");
+  html += url;
+  html += F("\");</script></head><body></body></html>");
+  send_no_cache_headers();
+  http_server.send(200, "text/html", html);
+}
+
+void handle_captive_probe() {
+  send_location_replace(String("http://") + WiFi.softAPIP().toString() + "/");
+}
+
+void request_scan() {
+  scan_pending = true;
+  page_status = k_scanning;
+  sta::start_scan();
+}
+
+void poll_scan() {
+  if (!scan_pending) {
+    return;
+  }
+  if (sta::scan_ready()) {
+    network_count = sta::take_scan(networks, k_max_networks);
+    scan_pending = false;
+    if (page_status == k_scanning) {
+      page_status = nullptr;
+    }
+    return;
+  }
+  if (!sta::scan_running()) {
+    sta::start_scan();
+  }
 }
 
 enum class tab_t { home, wifi, volume, logs, about };
@@ -123,7 +161,8 @@ void append_menu(String &html) {
 }
 
 void append_back(String &html) {
-  html += F("<p class=\"back\"><a href=\"/\">Back</a></p>");
+  html += F("<p class=\"back\"><a href=\"/\""
+            " onclick=\"location.replace('/');return false\">Back</a></p>");
 }
 
 void append_wifi_panel(String &html) {
@@ -149,7 +188,8 @@ void append_wifi_panel(String &html) {
       "<label>Network<select name=\"ssid\">");
 
   if (network_count == 0) {
-    html += F("<option value=\"\">No networks found</option>");
+    html += scan_pending ? F("<option value=\"\">Scanning…</option>")
+                         : F("<option value=\"\">No networks found</option>");
   }
   for (size_t i = 0; i < network_count; ++i) {
     html += F("<option value=\"");
@@ -219,15 +259,29 @@ void send_portal_page() {
   html += F(
       "<!DOCTYPE html><html lang=\"en\"><head>"
       "<meta charset=\"UTF-8\">"
-      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+      "<script>(function(){var h=\"");
+  html += WiFi.softAPIP().toString();
+  html += F("\";if(location.host!==h)location.replace(\"http://\"+h+\"/\""
+            "+location.search);})()</script>");
   if (sta_connecting) {
     html += F(
-        "<meta http-equiv=\"refresh\" content=\"1;url=/?tab=wifi\">"
         "<script>setTimeout(function(){location.replace('/?tab=wifi')},1000)"
         "</script>");
   } else if (parse_tab() == tab_t::logs) {
     html += F(
-        "<meta http-equiv=\"refresh\" content=\"2;url=/?tab=logs\">");
+        "<script>setTimeout(function(){location.replace('/?tab=logs')},2000)"
+        "</script>");
+  } else if (parse_tab() == tab_t::wifi && scan_pending) {
+    html += F(
+        "<script>(function(){var live=true;"
+        "addEventListener('pagehide',function(){live=false});"
+        "function p(){if(!live)return;fetch('/scan-status')"
+        ".then(function(r){return r.text()}).then(function(t){"
+        "if(!live)return;if(t.indexOf('done')===0)"
+        "location.replace('/?tab=wifi');else setTimeout(p,400)})"
+        ".catch(function(){if(live)setTimeout(p,400)});"
+        "}setTimeout(p,400)})()</script>");
   }
   html += F(
       "<title>Hug-Bot</title>"
@@ -267,7 +321,8 @@ void send_portal_page() {
       " }"
       "input[type=range] { width: 100%; }"
       ".dedication { font-size: 1.15rem; margin: 2rem 0; }"
-      "</style></head><body><main><h1>Hug-Bot</h1>");
+      ".heart { color: #e03131; }"
+      "</style></head><body><main><h1>Hug-Bot <span class=\"heart\">♥</span></h1>");
 
   if (sta_connecting) {
     html += F("<p class=\"lede\">Connecting. This page will update when "
@@ -302,13 +357,18 @@ void send_portal_page() {
 void bind_routes();
 
 void start_control_ap() {
-  WiFi.mode(WIFI_AP_STA);
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFi.mode(WIFI_AP_STA);
+  } else {
+    WiFi.mode(WIFI_AP);
+  }
   WiFi.softAP(k_ap_ssid, k_ap_psk);
 
   const IPAddress ap_ip = WiFi.softAPIP();
   dns_server.start(k_dns_port, "*", ap_ip);
   bind_routes();
   http_server.begin();
+  hosting = true;
 
   Serial.print("Setup SSID: ");
   Serial.println(k_ap_ssid);
@@ -316,6 +376,21 @@ void start_control_ap() {
   Serial.println(k_ap_psk);
   Serial.print("Portal URL: http://");
   Serial.println(ap_ip);
+  log::warn("Captive portal enabled");
+}
+
+void stop_control_ap() {
+  dns_server.stop();
+  http_server.stop();
+  WiFi.softAPdisconnect(true);
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFi.mode(WIFI_STA);
+  } else {
+    WiFi.mode(WIFI_OFF);
+  }
+  hosting = false;
+  sta_connecting = false;
+  log::warn("Captive portal disabled");
 }
 
 void handle_connect() {
@@ -329,14 +404,14 @@ void handle_connect() {
 
   if (ssid.isEmpty() || ssid.length() > wifi_t::k_ssid_max) {
     page_status = "Select or enter a network name.";
-    send_portal_page();
+    send_location_replace("/?tab=wifi");
     return;
   }
   if (psk.length() > wifi_t::k_psk_max ||
       (psk.length() > 0 && psk.length() < 8)) {
     page_status = "Password must be at least 8 characters, or blank if the "
                   "network is open.";
-    send_portal_page();
+    send_location_replace("/?tab=wifi");
     return;
   }
 
@@ -366,17 +441,17 @@ void handle_disconnect() {
   sta::disconnect();
   page_status = "Disconnected from Wi-Fi.";
   Serial.println("STA disconnected; Hug-Bot AP still up.");
-  http_server.sendHeader("Location", "/?tab=wifi", true);
-  send_no_cache_headers();
-  http_server.send(302, "text/plain", "");
+  send_location_replace("/?tab=wifi");
 }
 
 void handle_refresh() {
-  scan_networks();
-  page_status = nullptr;
-  http_server.sendHeader("Location", "/?tab=wifi", true);
+  request_scan();
+  send_location_replace("/?tab=wifi");
+}
+
+void handle_scan_status() {
   send_no_cache_headers();
-  http_server.send(302, "text/plain", "");
+  http_server.send(200, "text/plain", scan_pending ? "running" : "done");
 }
 
 void handle_volume() {
@@ -391,9 +466,7 @@ void handle_volume() {
     parsed = 100;
   }
   pref::set_volume(static_cast<uint8_t>(parsed));
-  http_server.sendHeader("Location", "/?tab=volume", true);
-  send_no_cache_headers();
-  http_server.send(302, "text/plain", "");
+  send_location_replace("/?tab=volume");
 }
 
 void bind_routes() {
@@ -401,14 +474,19 @@ void bind_routes() {
     return;
   }
 
+  http_server.on("/", send_portal_page);
   for (const char *path : k_probe_paths) {
-    http_server.on(path, send_portal_page);
+    if (path[0] == '/' && path[1] == '\0') {
+      continue;
+    }
+    http_server.on(path, handle_captive_probe);
   }
   http_server.on("/connect", HTTP_POST, handle_connect);
   http_server.on("/disconnect", HTTP_POST, handle_disconnect);
   http_server.on("/volume", HTTP_POST, handle_volume);
   http_server.on("/refresh", handle_refresh);
-  http_server.onNotFound(send_portal_page);
+  http_server.on("/scan-status", handle_scan_status);
+  http_server.onNotFound(handle_captive_probe);
   routes_bound = true;
 }
 
@@ -416,13 +494,33 @@ void bind_routes() {
 
 void setup() {
   sta::set_pump(pump);
-  start_control_ap();
-  scan_networks();
+  enable();
 }
 
 void loop() {
+  if (!hosting) {
+    return;
+  }
   pump();
+  poll_scan();
 }
+
+void enable() {
+  if (hosting) {
+    return;
+  }
+  start_control_ap();
+  request_scan();
+}
+
+void disable() {
+  if (!hosting) {
+    return;
+  }
+  stop_control_ap();
+}
+
+bool enabled() { return hosting; }
 
 }  // namespace cp
 }  // namespace hb

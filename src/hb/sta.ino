@@ -16,7 +16,9 @@ constexpr uint32_t k_retry_ms = 15000;
 
 pump_fn_t pump = nullptr;
 bool sta_wanted = false;
+bool scan_started = false;
 uint32_t retry_at = 0;
+uint32_t scan_retry_at = 0;
 
 void run_pump() {
   if (pump != nullptr) {
@@ -24,9 +26,23 @@ void run_pump() {
   }
 }
 
+void apply_sta_mode() {
+  if (WiFi.getMode() & WIFI_AP) {
+    WiFi.mode(WIFI_AP_STA);
+  } else {
+    WiFi.mode(WIFI_STA);
+  }
+}
+
+void abort_scan() {
+  WiFi.scanDelete();
+  scan_started = false;
+}
+
 bool connect_blocking(const char *ssid, const char *psk) {
+  abort_scan();
   WiFi.setAutoReconnect(false);
-  WiFi.mode(WIFI_AP_STA);
+  apply_sta_mode();
   WiFi.begin(ssid, psk);
 
   const uint32_t start = millis();
@@ -97,6 +113,9 @@ void disconnect() {
 }
 
 void loop() {
+  if (scan_running()) {
+    return;
+  }
   if (!sta_wanted || WiFi.status() == WL_CONNECTED || millis() < retry_at) {
     return;
   }
@@ -111,17 +130,63 @@ void loop() {
   Serial.print("Retrying ");
   Serial.println(wifi.ssid);
   log::warn("Retrying saved Wi-Fi");
-  WiFi.mode(WIFI_AP_STA);
+  apply_sta_mode();
   WiFi.begin(wifi.ssid, wifi.psk);
 }
 
-size_t scan(scan_ap_t *out, size_t cap) {
+void start_scan() {
+  if (scan_running()) {
+    return;
+  }
+  if (millis() < scan_retry_at) {
+    return;
+  }
+  WiFi.scanDelete();
+  // Do not call WiFi.mode() here. Switching AP→AP_STA and scanning
+  // immediately makes esp_wifi_scan_start fail, which used to show up as
+  // "No networks found".
+  const int16_t rc = WiFi.scanNetworks(true);
+  scan_started = (rc == WIFI_SCAN_RUNNING);
+  if (!scan_started) {
+    scan_retry_at = millis() + 250;
+  }
+}
+
+bool scan_running() {
+  if (!scan_started) {
+    return false;
+  }
+  const int16_t n = WiFi.scanComplete();
+  if (n == WIFI_SCAN_RUNNING) {
+    return true;
+  }
+  if (n < 0) {
+    scan_started = false;
+  }
+  return false;
+}
+
+bool scan_ready() {
+  return scan_started && WiFi.scanComplete() >= 0;
+}
+
+size_t take_scan(scan_ap_t *out, size_t cap) {
+  if (scan_running()) {
+    return 0;
+  }
+  scan_started = false;
   if (out == nullptr || cap == 0) {
+    WiFi.scanDelete();
+    return 0;
+  }
+
+  const int n = WiFi.scanComplete();
+  if (n < 0) {
+    WiFi.scanDelete();
     return 0;
   }
 
   size_t count = 0;
-  const int n = WiFi.scanNetworks();
   for (int i = 0; i < n && count < cap; ++i) {
     const String ssid = WiFi.SSID(i);
     if (ssid.isEmpty() || ssid.length() > wifi_t::k_ssid_max) {

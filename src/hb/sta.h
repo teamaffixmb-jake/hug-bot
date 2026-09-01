@@ -27,7 +27,12 @@ void disconnect();
 
 bool wanted();
 
-size_t scan(scan_ap_t *out, size_t cap);
+// Non-blocking scan. start_scan() returns immediately; pump HTTP while
+// scan_running(). When scan_ready(), take_scan() copies the list.
+void start_scan();
+bool scan_running();
+bool scan_ready();
+size_t take_scan(scan_ap_t *out, size_t cap);
 
 }  // namespace sta
 }  // namespace hb
