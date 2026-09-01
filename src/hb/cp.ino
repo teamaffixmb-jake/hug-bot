@@ -13,15 +13,15 @@ namespace hb {
 namespace cp {
 namespace {
 
-constexpr char kApSsid[] = "Hug-Bot";
+constexpr char k_ap_ssid[] = "Hug-Bot";
 // Setup-AP PSK. Same role as the WPA2 password printed on a router sticker:
 // the 4-way handshake encrypts the air before the portal POST runs.
-constexpr char kApPsk[] = "hugbot-setup";
-constexpr uint16_t kDnsPort = 53;
-constexpr uint16_t kHttpPort = 80;
-constexpr size_t kMaxNetworks = 16;
+constexpr char k_ap_psk[] = "hugbot-setup";
+constexpr uint16_t k_dns_port = 53;
+constexpr uint16_t k_http_port = 80;
+constexpr size_t k_max_networks = 16;
 
-constexpr const char *kProbePaths[] = {
+constexpr const char *k_probe_paths[] = {
     "/",
     "/generate_204",
     "/gen_204",
@@ -33,21 +33,21 @@ constexpr const char *kProbePaths[] = {
     "/success.txt",
 };
 
-sta::ScanAp networks[kMaxNetworks];
+sta::scan_ap_t networks[k_max_networks];
 size_t network_count = 0;
 const char *page_status = nullptr;
 bool routes_bound = false;
 bool sta_connecting = false;
 
 DNSServer dns_server;
-WebServer server(kHttpPort);
+WebServer http_server(k_http_port);
 
-void Pump() {
+void pump() {
   dns_server.processNextRequest();
-  server.handleClient();
+  http_server.handleClient();
 }
 
-void AppendHtmlEscaped(String &out, const char *s) {
+void append_html_escaped(String &out, const char *s) {
   for (; *s != '\0'; ++s) {
     switch (*s) {
       case '&':
@@ -72,47 +72,47 @@ void AppendHtmlEscaped(String &out, const char *s) {
   }
 }
 
-void SendNoCacheHeaders() {
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
+void send_no_cache_headers() {
+  http_server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  http_server.sendHeader("Pragma", "no-cache");
+  http_server.sendHeader("Expires", "-1");
 }
 
-void ScanNetworks() {
-  network_count = sta::Scan(networks, kMaxNetworks);
+void scan_networks() {
+  network_count = sta::scan(networks, k_max_networks);
 }
 
-enum class Tab { Home, Wifi, Volume, Logs, About };
+enum class tab_t { home, wifi, volume, logs, about };
 
-Tab ParseTab() {
-  const String uri = server.uri();
+tab_t parse_tab() {
+  const String uri = http_server.uri();
   if (uri == "/connect" || uri == "/refresh") {
-    return Tab::Wifi;
+    return tab_t::wifi;
   }
   if (uri == "/volume") {
-    return Tab::Volume;
+    return tab_t::volume;
   }
 
-  if (!server.hasArg("tab")) {
-    return Tab::Home;
+  if (!http_server.hasArg("tab")) {
+    return tab_t::home;
   }
-  const String tab = server.arg("tab");
+  const String tab = http_server.arg("tab");
   if (tab == "wifi") {
-    return Tab::Wifi;
+    return tab_t::wifi;
   }
   if (tab == "volume") {
-    return Tab::Volume;
+    return tab_t::volume;
   }
   if (tab == "logs") {
-    return Tab::Logs;
+    return tab_t::logs;
   }
   if (tab == "about") {
-    return Tab::About;
+    return tab_t::about;
   }
-  return Tab::Home;
+  return tab_t::home;
 }
 
-void AppendMenu(String &html) {
+void append_menu(String &html) {
   html += F(
       "<nav class=\"menu\">"
       "<a href=\"/?tab=wifi\">Wi-Fi</a>"
@@ -122,22 +122,22 @@ void AppendMenu(String &html) {
       "</nav>");
 }
 
-void AppendBack(String &html) {
+void append_back(String &html) {
   html += F("<p class=\"back\"><a href=\"/\">Back</a></p>");
 }
 
-void AppendWifiPanel(String &html) {
+void append_wifi_panel(String &html) {
   if (page_status != nullptr && page_status[0] != '\0') {
     html += F("<p class=\"status\">");
-    AppendHtmlEscaped(html, page_status);
+    append_html_escaped(html, page_status);
     html += F("</p>");
   }
 
   if (WiFi.status() == WL_CONNECTED) {
     html += F("<p class=\"status ok\">Connected to ");
-    AppendHtmlEscaped(html, WiFi.SSID().c_str());
+    append_html_escaped(html, WiFi.SSID().c_str());
     html += F("<br>LAN IP: ");
-    AppendHtmlEscaped(html, WiFi.localIP().toString().c_str());
+    append_html_escaped(html, WiFi.localIP().toString().c_str());
     html += F("</p>"
               "<form method=\"POST\" action=\"/disconnect\">"
               "<button type=\"submit\" class=\"secondary\">Disconnect "
@@ -153,9 +153,9 @@ void AppendWifiPanel(String &html) {
   }
   for (size_t i = 0; i < network_count; ++i) {
     html += F("<option value=\"");
-    AppendHtmlEscaped(html, networks[i].ssid);
+    append_html_escaped(html, networks[i].ssid);
     html += F("\">");
-    AppendHtmlEscaped(html, networks[i].ssid);
+    append_html_escaped(html, networks[i].ssid);
     html += networks[i].open ? F(" (open)") : F("");
     html += F("</option>");
   }
@@ -171,8 +171,8 @@ void AppendWifiPanel(String &html) {
       "<p class=\"refresh\"><a href=\"/refresh\">Refresh network list</a></p>");
 }
 
-void AppendVolumePanel(String &html) {
-  const uint8_t volume = pref::GetVolume();
+void append_volume_panel(String &html) {
+  const uint8_t volume = pref::get_volume();
   char value[4];
   snprintf(value, sizeof(value), "%u", volume);
 
@@ -189,31 +189,31 @@ void AppendVolumePanel(String &html) {
             "<button type=\"submit\">Save</button></form>");
 }
 
-void AppendLogsPanel(String &html) {
-  if (log::Size() == 0) {
+void append_logs_panel(String &html) {
+  if (log::size() == 0) {
     html += F("<p class=\"lede\">No warnings or errors yet.</p>");
     return;
   }
 
   html += F("<pre class=\"log\">");
-  char line[log::kLineMax];
-  log::Level level;
-  for (size_t i = 0; i < log::Size(); ++i) {
-    if (!log::Get(i, level, line, sizeof(line))) {
+  char line[log::k_line_max];
+  log::level_t level;
+  for (size_t i = 0; i < log::size(); ++i) {
+    if (!log::get(i, level, line, sizeof(line))) {
       continue;
     }
-    html += (level == log::Level::Error) ? F("E  ") : F("W  ");
-    AppendHtmlEscaped(html, line);
+    html += (level == log::level_t::error) ? F("E  ") : F("W  ");
+    append_html_escaped(html, line);
     html += '\n';
   }
   html += F("</pre>");
 }
 
-void AppendAboutPanel(String &html) {
+void append_about_panel(String &html) {
   html += F("<p class=\"lede dedication\">Made with love for Leon Masuda</p>");
 }
 
-void SendPortalPage() {
+void send_portal_page() {
   String html;
   html.reserve(8192);
   html += F(
@@ -225,7 +225,7 @@ void SendPortalPage() {
         "<meta http-equiv=\"refresh\" content=\"1;url=/?tab=wifi\">"
         "<script>setTimeout(function(){location.replace('/?tab=wifi')},1000)"
         "</script>");
-  } else if (ParseTab() == Tab::Logs) {
+  } else if (parse_tab() == tab_t::logs) {
     html += F(
         "<meta http-equiv=\"refresh\" content=\"2;url=/?tab=logs\">");
   }
@@ -273,70 +273,70 @@ void SendPortalPage() {
     html += F("<p class=\"lede\">Connecting. This page will update when "
               "done.</p><p class=\"refresh\"><a href=\"/?tab=wifi\">Continue"
               "</a></p></main></body></html>");
-    SendNoCacheHeaders();
-    server.send(200, "text/html", html);
+    send_no_cache_headers();
+    http_server.send(200, "text/html", html);
     return;
   }
 
-  const Tab tab = ParseTab();
-  if (tab == Tab::Home) {
-    AppendMenu(html);
+  const tab_t tab = parse_tab();
+  if (tab == tab_t::home) {
+    append_menu(html);
   } else {
-    AppendBack(html);
-    if (tab == Tab::Volume) {
-      AppendVolumePanel(html);
-    } else if (tab == Tab::Logs) {
-      AppendLogsPanel(html);
-    } else if (tab == Tab::About) {
-      AppendAboutPanel(html);
+    append_back(html);
+    if (tab == tab_t::volume) {
+      append_volume_panel(html);
+    } else if (tab == tab_t::logs) {
+      append_logs_panel(html);
+    } else if (tab == tab_t::about) {
+      append_about_panel(html);
     } else {
-      AppendWifiPanel(html);
+      append_wifi_panel(html);
     }
   }
 
   html += F("</main></body></html>");
-  SendNoCacheHeaders();
-  server.send(200, "text/html", html);
+  send_no_cache_headers();
+  http_server.send(200, "text/html", html);
 }
 
-void BindRoutes();
+void bind_routes();
 
-void StartControlAp() {
+void start_control_ap() {
   WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(kApSsid, kApPsk);
+  WiFi.softAP(k_ap_ssid, k_ap_psk);
 
   const IPAddress ap_ip = WiFi.softAPIP();
-  dns_server.start(kDnsPort, "*", ap_ip);
-  BindRoutes();
-  server.begin();
+  dns_server.start(k_dns_port, "*", ap_ip);
+  bind_routes();
+  http_server.begin();
 
   Serial.print("Setup SSID: ");
-  Serial.println(kApSsid);
+  Serial.println(k_ap_ssid);
   Serial.print("Setup password: ");
-  Serial.println(kApPsk);
+  Serial.println(k_ap_psk);
   Serial.print("Portal URL: http://");
   Serial.println(ap_ip);
 }
 
-void HandleConnect() {
-  String ssid = server.arg("ssid_custom");
+void handle_connect() {
+  String ssid = http_server.arg("ssid_custom");
   ssid.trim();
   if (ssid.isEmpty()) {
-    ssid = server.arg("ssid");
+    ssid = http_server.arg("ssid");
     ssid.trim();
   }
-  const String psk = server.arg("psk");
+  const String psk = http_server.arg("psk");
 
-  if (ssid.isEmpty() || ssid.length() > wifi_t::kSsidMax) {
+  if (ssid.isEmpty() || ssid.length() > wifi_t::k_ssid_max) {
     page_status = "Select or enter a network name.";
-    SendPortalPage();
+    send_portal_page();
     return;
   }
-  if (psk.length() > wifi_t::kPskMax ||
+  if (psk.length() > wifi_t::k_psk_max ||
       (psk.length() > 0 && psk.length() < 8)) {
     page_status = "Password must be at least 8 characters, or blank if the "
                   "network is open.";
-    SendPortalPage();
+    send_portal_page();
     return;
   }
 
@@ -344,13 +344,13 @@ void HandleConnect() {
   Serial.println(ssid);
 
   sta_connecting = true;
-  SendPortalPage();
+  send_portal_page();
 
-  if (!sta::Connect(ssid.c_str(), psk.c_str())) {
+  if (!sta::connect(ssid.c_str(), psk.c_str())) {
     sta_connecting = false;
     if (sta::wanted()) {
       page_status = "Could not connect. Check the password and try again.";
-      log::Error("Wi-Fi join failed");
+      log::error("Wi-Fi join failed");
     }
     return;
   }
@@ -361,28 +361,28 @@ void HandleConnect() {
   Serial.println(WiFi.localIP());
 }
 
-void HandleDisconnect() {
+void handle_disconnect() {
   sta_connecting = false;
-  sta::Disconnect();
+  sta::disconnect();
   page_status = "Disconnected from Wi-Fi.";
   Serial.println("STA disconnected; Hug-Bot AP still up.");
-  server.sendHeader("Location", "/?tab=wifi", true);
-  SendNoCacheHeaders();
-  server.send(302, "text/plain", "");
+  http_server.sendHeader("Location", "/?tab=wifi", true);
+  send_no_cache_headers();
+  http_server.send(302, "text/plain", "");
 }
 
-void HandleRefresh() {
-  ScanNetworks();
+void handle_refresh() {
+  scan_networks();
   page_status = nullptr;
-  server.sendHeader("Location", "/?tab=wifi", true);
-  SendNoCacheHeaders();
-  server.send(302, "text/plain", "");
+  http_server.sendHeader("Location", "/?tab=wifi", true);
+  send_no_cache_headers();
+  http_server.send(302, "text/plain", "");
 }
 
-void HandleVolume() {
+void handle_volume() {
   int parsed = 80;
-  if (server.hasArg("volume")) {
-    parsed = server.arg("volume").toInt();
+  if (http_server.hasArg("volume")) {
+    parsed = http_server.arg("volume").toInt();
   }
   if (parsed < 0) {
     parsed = 0;
@@ -390,38 +390,38 @@ void HandleVolume() {
   if (parsed > 100) {
     parsed = 100;
   }
-  pref::SetVolume(static_cast<uint8_t>(parsed));
-  server.sendHeader("Location", "/?tab=volume", true);
-  SendNoCacheHeaders();
-  server.send(302, "text/plain", "");
+  pref::set_volume(static_cast<uint8_t>(parsed));
+  http_server.sendHeader("Location", "/?tab=volume", true);
+  send_no_cache_headers();
+  http_server.send(302, "text/plain", "");
 }
 
-void BindRoutes() {
+void bind_routes() {
   if (routes_bound) {
     return;
   }
 
-  for (const char *path : kProbePaths) {
-    server.on(path, SendPortalPage);
+  for (const char *path : k_probe_paths) {
+    http_server.on(path, send_portal_page);
   }
-  server.on("/connect", HTTP_POST, HandleConnect);
-  server.on("/disconnect", HTTP_POST, HandleDisconnect);
-  server.on("/volume", HTTP_POST, HandleVolume);
-  server.on("/refresh", HandleRefresh);
-  server.onNotFound(SendPortalPage);
+  http_server.on("/connect", HTTP_POST, handle_connect);
+  http_server.on("/disconnect", HTTP_POST, handle_disconnect);
+  http_server.on("/volume", HTTP_POST, handle_volume);
+  http_server.on("/refresh", handle_refresh);
+  http_server.onNotFound(send_portal_page);
   routes_bound = true;
 }
 
 }  // namespace
 
 void setup() {
-  sta::SetPump(Pump);
-  StartControlAp();
-  ScanNetworks();
+  sta::set_pump(pump);
+  start_control_ap();
+  scan_networks();
 }
 
 void loop() {
-  Pump();
+  pump();
 }
 
 }  // namespace cp

@@ -7,22 +7,22 @@
 namespace hb {
 
 struct wifi_t {
-  static constexpr size_t kSsidMax = 32;
-  static constexpr size_t kPskMax = 63;
+  static constexpr size_t k_ssid_max = 32;
+  static constexpr size_t k_psk_max = 63;
 
-  char ssid[kSsidMax + 1];
-  char psk[kPskMax + 1];
+  char ssid[k_ssid_max + 1];
+  char psk[k_psk_max + 1];
 
-  void Assign(const char *ssid_src, const char *psk_src) {
+  void assign(const char *ssid_src, const char *psk_src) {
     ssid[0] = '\0';
     psk[0] = '\0';
     if (ssid_src != nullptr) {
-      strncpy(ssid, ssid_src, kSsidMax);
-      ssid[kSsidMax] = '\0';
+      strncpy(ssid, ssid_src, k_ssid_max);
+      ssid[k_ssid_max] = '\0';
     }
     if (psk_src != nullptr) {
-      strncpy(psk, psk_src, kPskMax);
-      psk[kPskMax] = '\0';
+      strncpy(psk, psk_src, k_psk_max);
+      psk[k_psk_max] = '\0';
     }
   }
 };

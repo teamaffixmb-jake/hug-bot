@@ -14,13 +14,13 @@ namespace pref {
 //   volume     0..100
 
 // Returns false if no station SSID is stored.
-bool GetWifi(wifi_t &out);
+bool get_wifi(wifi_t &out);
 
-void SetWifi(const wifi_t &wifi);
-void ClearWifi();
+void set_wifi(const wifi_t &wifi);
+void clear_wifi();
 
-uint8_t GetVolume();
-void SetVolume(uint8_t volume);
+uint8_t get_volume();
+void set_volume(uint8_t volume);
 
 }  // namespace pref
 }  // namespace hb

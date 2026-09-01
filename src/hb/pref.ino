@@ -7,61 +7,61 @@ namespace hb {
 namespace pref {
 namespace {
 
-constexpr char kNamespace[] = "hb";
-constexpr char kWifiSsidKey[] = "wifi_ssid";
-constexpr char kWifiPskKey[] = "wifi_psk";
-constexpr char kVolumeKey[] = "volume";
-constexpr uint8_t kVolumeDefault = 80;
+constexpr char k_namespace[] = "hb";
+constexpr char k_wifi_ssid_key[] = "wifi_ssid";
+constexpr char k_wifi_psk_key[] = "wifi_psk";
+constexpr char k_volume_key[] = "volume";
+constexpr uint8_t k_volume_default = 80;
 
 }  // namespace
 
-bool GetWifi(wifi_t &out) {
-  out.Assign(nullptr, nullptr);
+bool get_wifi(wifi_t &out) {
+  out.assign(nullptr, nullptr);
 
   Preferences prefs;
-  prefs.begin(kNamespace, true);
-  const String ssid = prefs.getString(kWifiSsidKey, "");
-  const String psk = prefs.getString(kWifiPskKey, "");
+  prefs.begin(k_namespace, true);
+  const String ssid = prefs.getString(k_wifi_ssid_key, "");
+  const String psk = prefs.getString(k_wifi_psk_key, "");
   prefs.end();
 
   if (ssid.isEmpty()) {
     return false;
   }
-  out.Assign(ssid.c_str(), psk.c_str());
+  out.assign(ssid.c_str(), psk.c_str());
   return true;
 }
 
-void SetWifi(const wifi_t &wifi) {
+void set_wifi(const wifi_t &wifi) {
   Preferences prefs;
-  prefs.begin(kNamespace, false);
-  prefs.putString(kWifiSsidKey, wifi.ssid);
-  prefs.putString(kWifiPskKey, wifi.psk);
+  prefs.begin(k_namespace, false);
+  prefs.putString(k_wifi_ssid_key, wifi.ssid);
+  prefs.putString(k_wifi_psk_key, wifi.psk);
   prefs.end();
 }
 
-void ClearWifi() {
+void clear_wifi() {
   Preferences prefs;
-  prefs.begin(kNamespace, false);
-  prefs.remove(kWifiSsidKey);
-  prefs.remove(kWifiPskKey);
+  prefs.begin(k_namespace, false);
+  prefs.remove(k_wifi_ssid_key);
+  prefs.remove(k_wifi_psk_key);
   prefs.end();
 }
 
-uint8_t GetVolume() {
+uint8_t get_volume() {
   Preferences prefs;
-  prefs.begin(kNamespace, true);
-  const uint8_t volume = prefs.getUChar(kVolumeKey, kVolumeDefault);
+  prefs.begin(k_namespace, true);
+  const uint8_t volume = prefs.getUChar(k_volume_key, k_volume_default);
   prefs.end();
   return volume > 100 ? 100 : volume;
 }
 
-void SetVolume(uint8_t volume) {
+void set_volume(uint8_t volume) {
   if (volume > 100) {
     volume = 100;
   }
   Preferences prefs;
-  prefs.begin(kNamespace, false);
-  prefs.putUChar(kVolumeKey, volume);
+  prefs.begin(k_namespace, false);
+  prefs.putUChar(k_volume_key, volume);
   prefs.end();
 }
 

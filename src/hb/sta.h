@@ -9,25 +9,25 @@
 namespace hb {
 namespace sta {
 
-using PumpFn = void (*)();
+using pump_fn_t = void (*)();
 
-struct ScanAp {
-  char ssid[wifi_t::kSsidMax + 1];
+struct scan_ap_t {
+  char ssid[wifi_t::k_ssid_max + 1];
   int32_t rssi;
   bool open;
 };
 
 void setup();
 void loop();
-void SetPump(PumpFn pump);
+void set_pump(pump_fn_t pump);
 
-bool Connect(const char *ssid, const char *psk);
-bool ConnectSaved();
-void Disconnect();
+bool connect(const char *ssid, const char *psk);
+bool connect_saved();
+void disconnect();
 
 bool wanted();
 
-size_t Scan(ScanAp *out, size_t cap);
+size_t scan(scan_ap_t *out, size_t cap);
 
 }  // namespace sta
 }  // namespace hb

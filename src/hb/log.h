@@ -6,18 +6,18 @@
 namespace hb {
 namespace log {
 
-enum class Level { Warn, Error };
+enum class level_t { warn, error };
 
-constexpr size_t kCapacity = 24;
-constexpr size_t kLineMax = 96;
+constexpr size_t k_capacity = 24;
+constexpr size_t k_line_max = 96;
 
-void Warn(const char *msg);
-void Error(const char *msg);
+void warn(const char *msg);
+void error(const char *msg);
 
-size_t Size();
+size_t size();
 
 // index 0 is oldest. Returns false if index is out of range.
-bool Get(size_t index, Level &level, char *msg, size_t msg_cap);
+bool get(size_t index, level_t &level, char *msg, size_t msg_cap);
 
 }  // namespace log
 }  // namespace hb
