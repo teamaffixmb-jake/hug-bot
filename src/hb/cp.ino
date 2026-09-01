@@ -19,6 +19,7 @@ constexpr char kApPsk[] = "hugbot-setup";
 constexpr uint16_t kDnsPort = 53;
 constexpr uint16_t kHttpPort = 80;
 constexpr uint32_t kConnectTimeoutMs = 15000;
+constexpr uint32_t kStaRetryMs = 15000;
 constexpr size_t kMaxNetworks = 16;
 constexpr size_t kSsidMaxLen = hb::wifi_t::kSsidMax;
 
@@ -34,29 +35,6 @@ constexpr const char *kProbePaths[] = {
     "/success.txt",
 };
 
-const char kConnectingHtml[] PROGMEM = R"html(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hug-Bot</title>
-  <style>
-    body { margin: 0; min-height: 100vh; display: flex; align-items: center;
-           justify-content: center; font-family: system-ui, sans-serif;
-           background: #fff5f7; color: #3b1f2b; }
-    main { text-align: center; padding: 2rem; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Hug-Bot</h1>
-    <p>Connecting. This setup network will drop if it works.</p>
-  </main>
-</body>
-</html>
-)html";
-
 struct ScannedNetwork {
   char ssid[kSsidMaxLen + 1];
   int32_t rssi;
@@ -66,8 +44,10 @@ struct ScannedNetwork {
 ScannedNetwork networks[kMaxNetworks];
 size_t network_count = 0;
 const char *page_status = nullptr;
-bool provisioning = false;
 bool routes_bound = false;
+bool sta_wanted = false;
+bool sta_connecting = false;
+uint32_t sta_retry_at = 0;
 
 DNSServer dns_server;
 WebServer server(kHttpPort);
@@ -135,11 +115,17 @@ void ScanNetworks() {
 
 void SendPortalPage() {
   String html;
-  html.reserve(3072);
+  html.reserve(4096);
   html += F(
       "<!DOCTYPE html><html lang=\"en\"><head>"
       "<meta charset=\"UTF-8\">"
-      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+      "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+  if (sta_connecting) {
+    html += F(
+        "<meta http-equiv=\"refresh\" content=\"1;url=/\">"
+        "<script>setTimeout(function(){location.replace('/')},1000)</script>");
+  }
+  html += F(
       "<title>Hug-Bot</title>"
       "<style>"
       ":root { color-scheme: light; }"
@@ -152,21 +138,47 @@ void SendPortalPage() {
       ".lede { text-align: center; opacity: 0.8; margin: 0 0 1.25rem; }"
       ".status { background: #ffe3ea; border-radius: 0.5rem; padding: 0.6rem"
       " 0.75rem; margin: 0 0 1rem; }"
+      ".ok { background: #e3f4ea; }"
       "form { display: grid; gap: 0.75rem; }"
       "label { display: grid; gap: 0.3rem; font-weight: 600; }"
       "select, input { font: inherit; padding: 0.55rem 0.6rem; border: 1px"
       " solid #e3b7c4; border-radius: 0.5rem; background: #fff; }"
       "button { font: inherit; font-weight: 650; padding: 0.7rem; border: 0;"
       " border-radius: 0.5rem; background: #3b1f2b; color: #fff; }"
+      "button.secondary { background: #fff; color: #3b1f2b; border: 1px solid"
+      " #3b1f2b; }"
       "a { color: inherit; }"
       ".refresh { text-align: center; margin: 1rem 0 0; }"
-      "</style></head><body><main><h1>Hug-Bot</h1>"
-      "<p class=\"lede\">Choose your Wi-Fi network.</p>");
+      "hr { border: 0; border-top: 1px solid #e3b7c4; margin: 1.25rem 0; }"
+      "</style></head><body><main><h1>Hug-Bot</h1>");
+
+  if (sta_connecting) {
+    html += F("<p class=\"lede\">Connecting. This page will update when "
+              "done.</p><p class=\"refresh\"><a href=\"/\">Continue</a></p>"
+              "</main></body></html>");
+    SendNoCacheHeaders();
+    server.send(200, "text/html", html);
+    return;
+  }
+
+  html += F(
+      "<p class=\"lede\">Control Hug-Bot from this setup network.</p>");
 
   if (page_status != nullptr && page_status[0] != '\0') {
     html += F("<p class=\"status\">");
     AppendHtmlEscaped(html, page_status);
     html += F("</p>");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    html += F("<p class=\"status ok\">Connected to ");
+    AppendHtmlEscaped(html, WiFi.SSID().c_str());
+    html += F("<br>LAN IP: ");
+    AppendHtmlEscaped(html, WiFi.localIP().toString().c_str());
+    html += F("</p>"
+              "<form method=\"POST\" action=\"/disconnect\">"
+              "<button type=\"submit\" class=\"secondary\">Disconnect "
+              "Wi-Fi</button></form><hr>");
   }
 
   html += F(
@@ -201,35 +213,30 @@ void SendPortalPage() {
 }
 
 bool ConnectSta(const char *ssid, const char *psk) {
-  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);
+  WiFi.mode(WIFI_AP_STA);
   WiFi.begin(ssid, psk);
 
   const uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - start >= kConnectTimeoutMs) {
-      WiFi.disconnect(true);
+    dns_server.processNextRequest();
+    server.handleClient();
+    if (!sta_wanted) {
+      WiFi.disconnect(false);
       return false;
     }
-    delay(50);
+    if (millis() - start >= kConnectTimeoutMs) {
+      WiFi.disconnect(false);
+      return false;
+    }
+    delay(10);
   }
   return true;
 }
 
-void StopProvisioning() {
-  dns_server.stop();
-  server.stop();
-  WiFi.softAPdisconnect(true);
-  WiFi.mode(WIFI_STA);
-  provisioning = false;
-
-  Serial.print("Connected. IP: ");
-  Serial.println(WiFi.localIP());
-}
-
 void BindRoutes();
 
-void StartProvisioning(const char *status) {
-  page_status = status;
+void StartControlAp() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(kApSsid, kApPsk);
 
@@ -237,7 +244,6 @@ void StartProvisioning(const char *status) {
   dns_server.start(kDnsPort, "*", ap_ip);
   BindRoutes();
   server.begin();
-  provisioning = true;
 
   Serial.print("Setup SSID: ");
   Serial.println(kApSsid);
@@ -269,22 +275,39 @@ void HandleConnect() {
     return;
   }
 
-  SendNoCacheHeaders();
-  server.send_P(200, "text/html", kConnectingHtml);
-  delay(300);
-
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
+  sta_wanted = true;
+  sta_connecting = true;
+  SendPortalPage();
+
   if (!ConnectSta(ssid.c_str(), psk.c_str())) {
-    StartProvisioning("Could not connect. Check the password and try again.");
+    sta_connecting = false;
+    if (sta_wanted) {
+      page_status = "Could not connect. Check the password and try again.";
+    }
     return;
   }
 
   hb::wifi_t wifi;
   wifi.Assign(ssid.c_str(), psk.c_str());
   hb::pref::SetWifi(wifi);
-  StopProvisioning();
+  page_status = "Connected.";
+  sta_connecting = false;
+  Serial.print("Connected. IP: ");
+  Serial.println(WiFi.localIP());
+}
+
+void HandleDisconnect() {
+  sta_wanted = false;
+  sta_connecting = false;
+  hb::pref::ClearWifi();
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false);
+  page_status = "Disconnected from Wi-Fi.";
+  Serial.println("STA disconnected; Hug-Bot AP still up.");
+  SendPortalPage();
 }
 
 void HandleRefresh() {
@@ -304,6 +327,7 @@ void BindRoutes() {
     server.on(path, SendPortalPage);
   }
   server.on("/connect", HTTP_POST, HandleConnect);
+  server.on("/disconnect", HTTP_POST, HandleDisconnect);
   server.on("/refresh", HandleRefresh);
   server.onNotFound(SendPortalPage);
   routes_bound = true;
@@ -317,6 +341,7 @@ bool ConnectSaved() {
 
   Serial.print("Connecting to saved network ");
   Serial.println(wifi.ssid);
+  sta_wanted = true;
   if (!ConnectSta(wifi.ssid, wifi.psk)) {
     Serial.println("Saved network failed.");
     return false;
@@ -327,42 +352,38 @@ bool ConnectSaved() {
   return true;
 }
 
-void HostPortal(const char *status) {
-  WiFi.mode(WIFI_STA);
-  ScanNetworks();
-  StartProvisioning(status);
-}
-
 }  // namespace
 
 void setup() {
   WiFi.persistent(false);
-  WiFi.disconnect(true, true);
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false, true);
 
-  if (ConnectSaved()) {
-    return;
-  }
-
-  HostPortal(nullptr);
+  StartControlAp();
+  ScanNetworks();
+  ConnectSaved();
 }
 
 void loop() {
-  if (provisioning) {
-    dns_server.processNextRequest();
-    server.handleClient();
+  dns_server.processNextRequest();
+  server.handleClient();
+
+  if (!sta_wanted || WiFi.status() == WL_CONNECTED ||
+      millis() < sta_retry_at) {
+    return;
+  }
+  sta_retry_at = millis() + kStaRetryMs;
+
+  hb::wifi_t wifi;
+  if (!hb::pref::GetWifi(wifi)) {
+    sta_wanted = false;
     return;
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    return;
-  }
-
-  Serial.println("Wi-Fi lost, retrying saved network.");
-  if (ConnectSaved()) {
-    return;
-  }
-
-  HostPortal("Wi-Fi dropped. Pick a network.");
+  Serial.print("Retrying ");
+  Serial.println(wifi.ssid);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(wifi.ssid, wifi.psk);
 }
 
 }  // namespace cp
