@@ -1,9 +1,12 @@
-void setup() {
-  // put your setup code here, to run once:
+#include "cp.h"
 
+constexpr uint32_t kSerialBaud = 115200;
+
+void setup() {
+  Serial.begin(kSerialBaud);
+  hb::cp::setup();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-
+  hb::cp::loop();
 }
