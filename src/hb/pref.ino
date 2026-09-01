@@ -10,6 +10,8 @@ namespace {
 constexpr char kNamespace[] = "hb";
 constexpr char kWifiSsidKey[] = "wifi_ssid";
 constexpr char kWifiPskKey[] = "wifi_psk";
+constexpr char kVolumeKey[] = "volume";
+constexpr uint8_t kVolumeDefault = 80;
 
 }  // namespace
 
@@ -42,6 +44,24 @@ void ClearWifi() {
   prefs.begin(kNamespace, false);
   prefs.remove(kWifiSsidKey);
   prefs.remove(kWifiPskKey);
+  prefs.end();
+}
+
+uint8_t GetVolume() {
+  Preferences prefs;
+  prefs.begin(kNamespace, true);
+  const uint8_t volume = prefs.getUChar(kVolumeKey, kVolumeDefault);
+  prefs.end();
+  return volume > 100 ? 100 : volume;
+}
+
+void SetVolume(uint8_t volume) {
+  if (volume > 100) {
+    volume = 100;
+  }
+  Preferences prefs;
+  prefs.begin(kNamespace, false);
+  prefs.putUChar(kVolumeKey, volume);
   prefs.end();
 }
 

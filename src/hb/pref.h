@@ -3,18 +3,24 @@
 
 #include "wifi_vo.h"
 
+#include <cstdint>
+
 namespace hb {
 namespace pref {
 
 // Long-term storage inventory (NVS namespace "hb"):
 //   wifi_ssid  station SSID  (wifi_t::ssid)
 //   wifi_psk   station PSK   (wifi_t::psk, empty = open network)
+//   volume     0..100
 
 // Returns false if no station SSID is stored.
 bool GetWifi(wifi_t &out);
 
 void SetWifi(const wifi_t &wifi);
 void ClearWifi();
+
+uint8_t GetVolume();
+void SetVolume(uint8_t volume);
 
 }  // namespace pref
 }  // namespace hb
