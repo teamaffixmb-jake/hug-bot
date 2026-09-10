@@ -19,8 +19,9 @@ bool passed = false;
 void setup() {
   sta::setup();
   mqtt::setup();
+  mqtt::listen_test_inbox();
   sta::connect_saved();
-  log::warn("Test 2: MQTT self inbox");
+  log::warn("Test 2: MQTT test inbox");
 }
 
 void loop() {
@@ -32,7 +33,7 @@ void loop() {
 
   if (!sent) {
     (void)mqtt::take_received();
-    if (!mqtt::publish_own_inbox()) {
+    if (!mqtt::publish_test_inbox()) {
       return;
     }
     sent = true;
@@ -50,7 +51,7 @@ void loop() {
     return;
   }
   next_pub_ms = millis() + k_retry_ms;
-  sent = mqtt::publish_own_inbox();
+  sent = mqtt::publish_test_inbox();
 }
 
 }  // namespace test_mqtt

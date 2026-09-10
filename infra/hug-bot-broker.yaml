@@ -214,6 +214,7 @@ Resources:
               root = f"arn:aws:iot:{region}:{acct}"
               inbox = f"{pfx}/{cid}/inbox"
               pinbox = f"{pfx}/{peer[cid]}/inbox"
+              test = f"{pfx}/{cid}/test"
               pid = "".join(ch for ch in cid if ch.isalnum())[:128] or "device"
               return {
                   "isAuthenticated": True, "principalId": pid,
@@ -224,13 +225,20 @@ Resources:
                           {"Effect": "Allow", "Action": "iot:Connect",
                            "Resource": f"{root}:client/{cid}"},
                           {"Effect": "Allow", "Action": "iot:Subscribe",
-                           "Resource": f"{root}:topicfilter/{inbox}"},
+                           "Resource": [
+                               f"{root}:topicfilter/{inbox}",
+                               f"{root}:topicfilter/{test}",
+                           ]},
                           {"Effect": "Allow", "Action": "iot:Receive",
-                           "Resource": f"{root}:topic/{inbox}"},
+                           "Resource": [
+                               f"{root}:topic/{inbox}",
+                               f"{root}:topic/{test}",
+                           ]},
                           {"Effect": "Allow", "Action": "iot:Publish",
                            "Resource": [
                                f"{root}:topic/{inbox}",
                                f"{root}:topic/{pinbox}",
+                               f"{root}:topic/{test}",
                            ]},
                       ],
                   }],

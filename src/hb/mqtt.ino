@@ -29,6 +29,8 @@ bool rx_pending = false;
 uint32_t retry_at = 0;
 char inbox[k_topic_max];
 char outbox[k_topic_max];
+char testbox[k_topic_max];
+bool listen_test = false;
 
 bool secrets_present() {
   return k_host[0] != '\0' && k_device_id[0] != '\0' && k_peer_id[0] != '\0' &&
@@ -88,7 +90,8 @@ bool try_connect() {
     log::error("MQTT connect failed");
     return false;
   }
-  if (!client.subscribe(inbox, 1)) {
+  const char *sub = listen_test ? testbox : inbox;
+  if (!client.subscribe(sub, 1)) {
     log::error("MQTT subscribe failed");
     client.stop();
     return false;
@@ -120,7 +123,10 @@ bool ensure_connected() {
 void setup() {
   make_topic(inbox, sizeof(inbox), k_device_id);
   make_topic(outbox, sizeof(outbox), k_peer_id);
+  snprintf(testbox, sizeof(testbox), "%s/%s/test", k_topic_prefix, k_device_id);
 }
+
+void listen_test_inbox() { listen_test = true; }
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -165,7 +171,7 @@ bool publish_topic(const char *topic) {
 
 bool publish_hug() { return publish_topic(outbox); }
 
-bool publish_own_inbox() { return publish_topic(inbox); }
+bool publish_test_inbox() { return publish_topic(testbox); }
 
 }  // namespace mqtt
 }  // namespace hb

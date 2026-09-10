@@ -39,8 +39,9 @@ bool connected();
 // Publishes a one-byte hug to the peer inbox (QoS 1, not retained).
 bool publish_hug();
 
-// Publishes the same payload to this device's own inbox (loopback).
-bool publish_own_inbox();
+// Loopback on hugbot/<id>/test, not the hug inbox.
+void listen_test_inbox();
+bool publish_test_inbox();
 
 // True if a message arrived since the last call (clears the flag).
 bool take_received();
