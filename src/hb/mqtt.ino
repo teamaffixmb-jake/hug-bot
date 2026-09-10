@@ -56,15 +56,6 @@ void start_ntp() {
   ntp_started = true;
 }
 
-void drain_message() {
-  if (client.available() > 0) {
-    rx_byte = static_cast<uint8_t>(client.read());
-  }
-  while (client.available() > 0) {
-    (void)client.read();
-  }
-}
-
 void stop_client() {
   if (client.connected()) {
     client.stop();
@@ -98,7 +89,7 @@ bool try_connect() {
   }
   if (listen != listen_t::none) {
     const char *sub = (listen == listen_t::test) ? test_rx : inbox;
-    if (!client.subscribe(sub, 1)) {
+    if (!client.subscribe(sub)) {
       log::error("MQTT subscribe failed");
       client.stop();
       return false;
@@ -152,12 +143,11 @@ void loop() {
     return;
   }
 
-  // parseMessage() calls poll(). Calling poll() first parks on the payload,
-  // then parseMessage() discards it as a leftover unread message.
-  if (client.parseMessage() != 0) {
-    rx_pending = true;
-    drain_message();
+  if (client.parseMessage() == 0) {
+    return;
   }
+  rx_byte = static_cast<uint8_t>(client.read());
+  rx_pending = true;
 }
 
 bool connected() { return client.connected(); }
@@ -172,21 +162,16 @@ bool take_received(uint8_t &b) {
 }
 
 bool publish_topic(const char *topic, uint8_t b) {
-  if (!ensure_connected()) {
-    log::error("Hug send failed (MQTT)");
+  if (!client.beginMessage(topic)) {
     return false;
   }
-
-  if (!client.beginMessage(topic, false, 1) || client.write(b) != 1 ||
-      !client.endMessage()) {
-    log::error("Hug send failed (MQTT)");
-    return false;
-  }
-  return true;
+  client.write(b);
+  return client.endMessage();
 }
 
 bool publish_hug() {
   if (!publish_topic(outbox, static_cast<uint8_t>(k_payload[0]))) {
+    log::error("Hug send failed (MQTT)");
     return false;
   }
   log::warn("Hug sent");
