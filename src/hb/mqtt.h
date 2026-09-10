@@ -36,6 +36,7 @@ constexpr const char *k_token = k_device_a_token;
 // Requires the ArduinoMqttClient library.
 void setup();
 void loop();
+void stop();
 bool connected();
 
 // Publishes a one-byte hug to the peer inbox.

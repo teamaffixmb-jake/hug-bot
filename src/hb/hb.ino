@@ -3,7 +3,7 @@
 // 2 = MQTT tx to hugbot/<id>/test-tx every 15s
 // 3 = pb held: log every 100ms
 // 4 = MQTT rx on hugbot/<id>/test-rx
-#define RUN_MODE 4
+#define RUN_MODE 0
 
 #include "main.h"
 #include "test.h"

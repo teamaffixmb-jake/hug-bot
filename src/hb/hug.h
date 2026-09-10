@@ -7,8 +7,11 @@ namespace hug {
 void setup();
 void loop();
 
-// Physical trigger is not chosen yet. Call this from that layer when it
-// exists. Publishes a hug to the peer inbox over MQTT.
+// Stops MQTT/TLS. Call when leaving hug ops so the session is not left
+// up under the captive-portal AP.
+void pause();
+
+// Publishes a hug to the peer inbox. Invoked from mode::short_press().
 void send();
 
 }  // namespace hug

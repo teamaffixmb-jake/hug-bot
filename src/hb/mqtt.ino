@@ -39,6 +39,14 @@ void make_topic(char *out, size_t cap, const char *device_id, const char *leaf) 
   snprintf(out, cap, "%s/%s/%s", k_topic_prefix, device_id, leaf);
 }
 
+void stop_session() {
+  ntp_started = false;
+  rx_pending = false;
+  retry_at = 0;
+  tls.stop();
+  client.stop();
+}
+
 void start_ntp() {
   if (!ntp_started) {
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
@@ -98,12 +106,12 @@ void listen_test_rx() { listen = listen_t::test; }
 
 void listen_none() { listen = listen_t::none; }
 
+void stop() { stop_session(); }
+
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     if (ntp_started) {
-      ntp_started = false;
-      tls.stop();
-      client.stop();
+      stop_session();
     }
     return;
   }

@@ -1,7 +1,6 @@
 #include "main.h"
-#include "cp.h"
-#include "hug.h"
 #include "input.h"
+#include "mode.h"
 #include "pb.h"
 #include "sta.h"
 
@@ -13,14 +12,14 @@ void main_entry_setup() {
   hug::setup();
   pb::setup();
   input::setup();
+  mode::setup();
   sta::connect_saved();
 }
 
 void main_entry_loop() {
   input::loop();
-  cp::loop();
   sta::loop();
-  hug::loop();
+  mode::loop();
 }
 
 }  // namespace hb

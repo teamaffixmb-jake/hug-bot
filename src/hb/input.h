@@ -4,10 +4,9 @@
 namespace hb {
 namespace input {
 
-// GPIO is not chosen yet. When it is, this layer should call hug::send()
-// and cp::enable() / cp::disable() / cp::toggle(). setup/loop do not
-// start the portal or send a hug on their own. Serial: 'e' portal on,
-// 'd' portal off, 'h' send hug.
+// Push-button (pb) + Serial. Gestures go through mode; this layer does
+// not call cp or hug directly. Serial: 'e' slot 1, 'd' slot 0, 'h' short
+// press. setup() is empty; pb::setup() owns the pin.
 void setup();
 void loop();
 
