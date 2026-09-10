@@ -1,8 +1,8 @@
 // 0 = production (main_entry)
 // 1 = cp toggle every 60s
-// 2 = MQTT tx to test inbox every 15s
+// 2 = MQTT tx to hugbot/<id>/test-tx every 15s
 // 3 = pb held: log every 100ms
-// 4 = MQTT rx on test inbox
+// 4 = MQTT rx on hugbot/<id>/test-rx
 #define RUN_MODE 2
 
 #include "main.h"

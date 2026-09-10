@@ -21,7 +21,7 @@ void setup() {
   mqtt::setup();
   mqtt::listen_none();
   sta::connect_saved();
-  log::warn("Test 2: MQTT tx 0-255");
+  log::warn("Test 2: MQTT tx hugbot/*/test-tx");
 }
 
 void loop() {
@@ -34,7 +34,7 @@ void loop() {
     return;
   }
   next_pub_ms = millis() + k_period_ms;
-  if (mqtt::publish_test_inbox(seq)) {
+  if (mqtt::publish_test_tx(seq)) {
     char line[24];
     snprintf(line, sizeof(line), "MQTT sent %u", static_cast<unsigned>(seq));
     log::warn(line);

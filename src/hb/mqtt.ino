@@ -30,7 +30,8 @@ uint8_t rx_byte = 0;
 uint32_t retry_at = 0;
 char inbox[k_topic_max];
 char outbox[k_topic_max];
-char testbox[k_topic_max];
+char test_tx[k_topic_max];
+char test_rx[k_topic_max];
 enum class listen_t { hug, test, none };
 listen_t listen = listen_t::hug;
 
@@ -88,7 +89,7 @@ bool try_connect() {
   client.setId(k_device_id);
   client.setUsernamePassword(k_device_id, k_token);
   client.setCleanSession(listen != listen_t::hug);
-  client.setKeepAliveInterval(k_keepalive_ms);
+  client.setKeepAliveInterval(listen == listen_t::hug ? k_keepalive_ms : 30000);
   client.setConnectionTimeout(k_connect_timeout_ms);
 
   if (!client.connect(k_host, k_port)) {
@@ -96,12 +97,13 @@ bool try_connect() {
     return false;
   }
   if (listen != listen_t::none) {
-    const char *sub = (listen == listen_t::test) ? testbox : inbox;
+    const char *sub = (listen == listen_t::test) ? test_rx : inbox;
     if (!client.subscribe(sub, 1)) {
       log::error("MQTT subscribe failed");
       client.stop();
       return false;
     }
+    log::warn(sub);
   }
   log::warn("MQTT connected");
   return true;
@@ -130,10 +132,13 @@ bool ensure_connected() {
 void setup() {
   make_topic(inbox, sizeof(inbox), k_device_id);
   make_topic(outbox, sizeof(outbox), k_peer_id);
-  snprintf(testbox, sizeof(testbox), "%s/%s/test", k_topic_prefix, k_device_id);
+  snprintf(test_tx, sizeof(test_tx), "%s/%s/test-tx", k_topic_prefix,
+           k_device_id);
+  snprintf(test_rx, sizeof(test_rx), "%s/%s/test-rx", k_topic_prefix,
+           k_device_id);
 }
 
-void listen_test_inbox() { listen = listen_t::test; }
+void listen_test_rx() { listen = listen_t::test; }
 
 void listen_none() { listen = listen_t::none; }
 
@@ -147,7 +152,8 @@ void loop() {
     return;
   }
 
-  client.poll();
+  // parseMessage() calls poll(). Calling poll() first parks on the payload,
+  // then parseMessage() discards it as a leftover unread message.
   if (client.parseMessage() != 0) {
     rx_pending = true;
     drain_message();
@@ -187,7 +193,7 @@ bool publish_hug() {
   return true;
 }
 
-bool publish_test_inbox(uint8_t b) { return publish_topic(testbox, b); }
+bool publish_test_tx(uint8_t b) { return publish_topic(test_tx, b); }
 
 }  // namespace mqtt
 }  // namespace hb

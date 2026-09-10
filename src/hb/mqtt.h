@@ -41,10 +41,10 @@ bool connected();
 // Publishes a one-byte hug to the peer inbox (QoS 1, not retained).
 bool publish_hug();
 
-// Loopback on hugbot/<id>/test, not the hug inbox.
-void listen_test_inbox();
+// Test mailboxes hugbot/<id>/test-tx and hugbot/<id>/test-rx.
+void listen_test_rx();
 void listen_none();
-bool publish_test_inbox(uint8_t b);
+bool publish_test_tx(uint8_t b);
 
 // True if a message arrived since the last call (clears the flag).
 bool take_received(uint8_t &b);

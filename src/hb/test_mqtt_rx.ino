@@ -12,9 +12,9 @@ namespace test_mqtt_rx {
 void setup() {
   sta::setup();
   mqtt::setup();
-  mqtt::listen_test_inbox();
+  mqtt::listen_test_rx();
   sta::connect_saved();
-  log::warn("Test 4: MQTT rx test inbox");
+  log::warn("Test 4: MQTT rx hugbot/*/test-rx");
 }
 
 void loop() {
