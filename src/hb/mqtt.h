@@ -38,7 +38,7 @@ void setup();
 void loop();
 bool connected();
 
-// Publishes a one-byte hug to the peer inbox (not retained).
+// Publishes a one-byte hug to the peer inbox.
 bool publish_hug();
 
 // Test mailboxes hugbot/<id>/test-tx and hugbot/<id>/test-rx.
