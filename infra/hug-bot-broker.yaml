@@ -228,7 +228,10 @@ Resources:
                           {"Effect": "Allow", "Action": "iot:Receive",
                            "Resource": f"{root}:topic/{inbox}"},
                           {"Effect": "Allow", "Action": "iot:Publish",
-                           "Resource": f"{root}:topic/{pinbox}"},
+                           "Resource": [
+                               f"{root}:topic/{inbox}",
+                               f"{root}:topic/{pinbox}",
+                           ]},
                       ],
                   }],
               }

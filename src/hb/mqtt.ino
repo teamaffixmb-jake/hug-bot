@@ -25,6 +25,7 @@ constexpr size_t k_topic_max = 96;
 WiFiClientSecure tls;
 MqttClient client(tls);
 bool ntp_started = false;
+bool rx_pending = false;
 uint32_t retry_at = 0;
 char inbox[k_topic_max];
 char outbox[k_topic_max];
@@ -133,6 +134,7 @@ void loop() {
 
   client.poll();
   if (client.parseMessage() != 0) {
+    rx_pending = true;
     log::warn("Hug received");
     drain_message();
   }
@@ -140,13 +142,19 @@ void loop() {
 
 bool connected() { return client.connected(); }
 
-bool publish_hug() {
+bool take_received() {
+  const bool pending = rx_pending;
+  rx_pending = false;
+  return pending;
+}
+
+bool publish_topic(const char *topic) {
   if (!ensure_connected()) {
     log::error("Hug send failed (MQTT)");
     return false;
   }
 
-  if (!client.beginMessage(outbox, false, 1) || client.print(k_payload) != 1 ||
+  if (!client.beginMessage(topic, false, 1) || client.print(k_payload) != 1 ||
       !client.endMessage()) {
     log::error("Hug send failed (MQTT)");
     return false;
@@ -154,6 +162,10 @@ bool publish_hug() {
   log::warn("Hug sent");
   return true;
 }
+
+bool publish_hug() { return publish_topic(outbox); }
+
+bool publish_own_inbox() { return publish_topic(inbox); }
 
 }  // namespace mqtt
 }  // namespace hb

@@ -1,22 +1,28 @@
-#include "cp.h"
-#include "hug.h"
-#include "input.h"
-#include "sta.h"
+// 0 = production (main_entry)
+// 1 = cp toggle every 60s
+// 2 = MQTT publish to own inbox and wait to receive it
+#define RUN_MODE 0
+
+#include "main.h"
+#include "test.h"
+
+#include <Arduino.h>
 
 constexpr uint32_t k_serial_baud = 115200;
 
 void setup() {
   Serial.begin(k_serial_baud);
-  hb::sta::setup();
-  hb::cp::setup();
-  hb::hug::setup();
-  hb::input::setup();
-  hb::sta::connect_saved();
+#if RUN_MODE == 0
+  hb::main_entry_setup();
+#else
+  hb::test_entry_setup();
+#endif
 }
 
 void loop() {
-  hb::input::loop();
-  hb::cp::loop();
-  hb::sta::loop();
-  hb::hug::loop();
+#if RUN_MODE == 0
+  hb::main_entry_loop();
+#else
+  hb::test_entry_loop();
+#endif
 }

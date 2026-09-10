@@ -39,6 +39,12 @@ bool connected();
 // Publishes a one-byte hug to the peer inbox (QoS 1, not retained).
 bool publish_hug();
 
+// Publishes the same payload to this device's own inbox (loopback).
+bool publish_own_inbox();
+
+// True if a message arrived since the last call (clears the flag).
+bool take_received();
+
 }  // namespace mqtt
 }  // namespace hb
 
