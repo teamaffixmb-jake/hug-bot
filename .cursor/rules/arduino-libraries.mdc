@@ -1,0 +1,13 @@
+---
+description: Ask the user to install Arduino libraries in Arduino IDE; do not install them on disk.
+alwaysApply: true
+---
+
+# Arduino libraries
+
+The user uses Arduino IDE (Arduino Studio). When a library is missing or newly required:
+
+- Ask them to install it in the IDE: **Sketch → Include Library → Manage Libraries…**
+- Name the library as it appears in Library Manager (e.g. `ArduinoMqttClient`).
+- Do not `git clone`, curl, or otherwise write libraries into `~/Arduino/libraries` or `.arduino15`.
+- Do not run `arduino-cli lib install` unless they explicitly ask.

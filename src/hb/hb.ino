@@ -1,7 +1,7 @@
 // 0 = production (main_entry)
 // 1 = cp toggle every 60s
 // 2 = MQTT publish to own inbox and wait to receive it
-#define RUN_MODE 0
+#define RUN_MODE 1
 
 #include "main.h"
 #include "test.h"
