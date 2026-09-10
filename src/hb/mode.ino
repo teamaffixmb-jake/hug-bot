@@ -38,8 +38,7 @@ void setup() {
 
   wifi_t wifi;
   if (current == slot_t::hug && !pref::get_wifi(wifi)) {
-    current = slot_t::portal;
-    enter(current);
+    set_slot(static_cast<uint8_t>(slot_t::portal));
     return;
   }
 
