@@ -4,8 +4,9 @@
 namespace hb {
 namespace input {
 
-// Physical triggers that call cp::enable / cp::disable live here once
-// hardware exists. setup/loop are the hooks; they do not start the portal.
+// GPIO is not chosen yet. When it is, this layer should call hug::send()
+// and cp::enable() / cp::disable() / cp::toggle(). setup/loop do not
+// start the portal or send a hug on their own.
 void setup();
 void loop();
 

@@ -471,7 +471,6 @@ void bind_routes() {
 
 void setup() {
   sta::set_pump(pump);
-  enable();
 }
 
 void loop() {
@@ -494,6 +493,14 @@ void disable() {
     return;
   }
   stop_control_ap();
+}
+
+void toggle() {
+  if (hosting) {
+    disable();
+  } else {
+    enable();
+  }
 }
 
 bool enabled() { return hosting; }

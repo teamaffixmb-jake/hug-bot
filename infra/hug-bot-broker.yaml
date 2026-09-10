@@ -95,26 +95,6 @@ Rules:
         AssertDescription: DeviceAToken and DeviceBToken must be different.
 
 Resources:
-  DeviceATokenParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub "/${AWS::StackName}/devices/${DeviceAId}/token"
-      Type: SecureString
-      Value: !Ref DeviceAToken
-      Description: !Sub "MQTT password for ${DeviceAId}"
-      Tags:
-        Project: hug-bot
-
-  DeviceBTokenParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub "/${AWS::StackName}/devices/${DeviceBId}/token"
-      Type: SecureString
-      Value: !Ref DeviceBToken
-      Description: !Sub "MQTT password for ${DeviceBId}"
-      Tags:
-        Project: hug-bot
-
   DeviceAThing:
     Type: AWS::IoT::Thing
     Properties:
@@ -324,14 +304,6 @@ Outputs:
   DeviceBInboxTopic:
     Description: Topic device B subscribes to; device A publishes here.
     Value: !Sub "${TopicPrefix}/${DeviceBId}/inbox"
-
-  DeviceATokenParameter:
-    Description: SSM path for device A's MQTT password (SecureString).
-    Value: !Ref DeviceATokenParameter
-
-  DeviceBTokenParameter:
-    Description: SSM path for device B's MQTT password (SecureString).
-    Value: !Ref DeviceBTokenParameter
 
   AmazonRootCA:
     Description: Trust store file to flash onto both ESP32s.
