@@ -1,6 +1,8 @@
 #ifndef HUG_BOT_MQTT_H
 #define HUG_BOT_MQTT_H
 
+#include <cstdint>
+
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
@@ -41,10 +43,11 @@ bool publish_hug();
 
 // Loopback on hugbot/<id>/test, not the hug inbox.
 void listen_test_inbox();
-bool publish_test_inbox();
+void listen_none();
+bool publish_test_inbox(uint8_t b);
 
 // True if a message arrived since the last call (clears the flag).
-bool take_received();
+bool take_received(uint8_t &b);
 
 }  // namespace mqtt
 }  // namespace hb

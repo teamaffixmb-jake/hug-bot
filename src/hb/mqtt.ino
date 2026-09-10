@@ -26,11 +26,13 @@ WiFiClientSecure tls;
 MqttClient client(tls);
 bool ntp_started = false;
 bool rx_pending = false;
+uint8_t rx_byte = 0;
 uint32_t retry_at = 0;
 char inbox[k_topic_max];
 char outbox[k_topic_max];
 char testbox[k_topic_max];
-bool listen_test = false;
+enum class listen_t { hug, test, none };
+listen_t listen = listen_t::hug;
 
 bool secrets_present() {
   return k_host[0] != '\0' && k_device_id[0] != '\0' && k_peer_id[0] != '\0' &&
@@ -54,6 +56,9 @@ void start_ntp() {
 }
 
 void drain_message() {
+  if (client.available() > 0) {
+    rx_byte = static_cast<uint8_t>(client.read());
+  }
   while (client.available() > 0) {
     (void)client.read();
   }
@@ -82,7 +87,7 @@ bool try_connect() {
   tls.setCACert(k_amazon_root_ca1);
   client.setId(k_device_id);
   client.setUsernamePassword(k_device_id, k_token);
-  client.setCleanSession(false);
+  client.setCleanSession(listen != listen_t::hug);
   client.setKeepAliveInterval(k_keepalive_ms);
   client.setConnectionTimeout(k_connect_timeout_ms);
 
@@ -90,11 +95,13 @@ bool try_connect() {
     log::error("MQTT connect failed");
     return false;
   }
-  const char *sub = listen_test ? testbox : inbox;
-  if (!client.subscribe(sub, 1)) {
-    log::error("MQTT subscribe failed");
-    client.stop();
-    return false;
+  if (listen != listen_t::none) {
+    const char *sub = (listen == listen_t::test) ? testbox : inbox;
+    if (!client.subscribe(sub, 1)) {
+      log::error("MQTT subscribe failed");
+      client.stop();
+      return false;
+    }
   }
   log::warn("MQTT connected");
   return true;
@@ -126,7 +133,9 @@ void setup() {
   snprintf(testbox, sizeof(testbox), "%s/%s/test", k_topic_prefix, k_device_id);
 }
 
-void listen_test_inbox() { listen_test = true; }
+void listen_test_inbox() { listen = listen_t::test; }
+
+void listen_none() { listen = listen_t::none; }
 
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
@@ -141,37 +150,44 @@ void loop() {
   client.poll();
   if (client.parseMessage() != 0) {
     rx_pending = true;
-    log::warn("Hug received");
     drain_message();
   }
 }
 
 bool connected() { return client.connected(); }
 
-bool take_received() {
-  const bool pending = rx_pending;
+bool take_received(uint8_t &b) {
+  if (!rx_pending) {
+    return false;
+  }
+  b = rx_byte;
   rx_pending = false;
-  return pending;
+  return true;
 }
 
-bool publish_topic(const char *topic) {
+bool publish_topic(const char *topic, uint8_t b) {
   if (!ensure_connected()) {
     log::error("Hug send failed (MQTT)");
     return false;
   }
 
-  if (!client.beginMessage(topic, false, 1) || client.print(k_payload) != 1 ||
+  if (!client.beginMessage(topic, false, 1) || client.write(b) != 1 ||
       !client.endMessage()) {
     log::error("Hug send failed (MQTT)");
+    return false;
+  }
+  return true;
+}
+
+bool publish_hug() {
+  if (!publish_topic(outbox, static_cast<uint8_t>(k_payload[0]))) {
     return false;
   }
   log::warn("Hug sent");
   return true;
 }
 
-bool publish_hug() { return publish_topic(outbox); }
-
-bool publish_test_inbox() { return publish_topic(testbox); }
+bool publish_test_inbox(uint8_t b) { return publish_topic(testbox, b); }
 
 }  // namespace mqtt
 }  // namespace hb
