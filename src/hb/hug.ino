@@ -1,16 +1,14 @@
 #include "hug.h"
-#include "log.h"
+#include "mqtt.h"
 
 namespace hb {
 namespace hug {
 
-void setup() {}
+void setup() { mqtt::setup(); }
 
-void loop() {}
+void loop() { mqtt::loop(); }
 
-void send() {
-  log::warn("Hug send (broker not wired yet)");
-}
+void send() { mqtt::publish_hug(); }
 
 }  // namespace hug
 }  // namespace hb

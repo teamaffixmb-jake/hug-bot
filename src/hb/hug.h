@@ -8,7 +8,7 @@ void setup();
 void loop();
 
 // Physical trigger is not chosen yet. Call this from that layer when it
-// exists. Broker publish is not wired yet; this is the send entrypoint.
+// exists. Publishes a hug to the peer inbox over MQTT.
 void send();
 
 }  // namespace hug
