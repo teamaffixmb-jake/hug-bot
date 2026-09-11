@@ -5,7 +5,9 @@
 // 4 = MQTT rx on hugbot/<id>/test-rx
 // 5 = OLED I2C "Hello!"
 // 6 = OLED stick-figure hug animation
-#define RUN_MODE 6
+// 7 = OLED "hug sent!" fly-by
+// 8 = OLED hug-sending loader
+#define RUN_MODE 8
 
 #include "main.h"
 #include "test.h"
