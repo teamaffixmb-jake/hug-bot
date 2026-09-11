@@ -11,6 +11,9 @@ void on_receive();
 void stop();
 void resume();
 
+// True iff state is mqttWait after the call (including already there).
+bool on_mqtt_connecting();
+
 }  // namespace oled_ui
 }  // namespace hb
 

@@ -34,6 +34,8 @@ char test_tx[k_topic_max];
 char test_rx[k_topic_max];
 enum class listen_t { hug, test, none };
 listen_t listen = listen_t::hug;
+enum class attempt_t : uint8_t { none, fail };
+attempt_t last_attempt = attempt_t::none;
 
 void make_topic(char *out, size_t cap, const char *device_id, const char *leaf) {
   snprintf(out, cap, "%s/%s/%s", k_topic_prefix, device_id, leaf);
@@ -43,6 +45,7 @@ void stop_session() {
   ntp_started = false;
   rx_pending = false;
   retry_at = 0;
+  last_attempt = attempt_t::none;
   tls.stop();
   client.stop();
 }
@@ -121,7 +124,9 @@ void loop() {
     if (time(nullptr) < k_min_epoch || millis() < retry_at) {
       return;
     }
-    try_connect();
+    if (!try_connect()) {
+      last_attempt = attempt_t::fail;
+    }
     retry_at = millis() + k_retry_ms;
   }
 
@@ -137,6 +142,14 @@ void loop() {
 }
 
 bool connected() { return client.connected(); }
+
+connect_attempt_t take_connect_attempt() {
+  if (last_attempt == attempt_t::none) {
+    return connect_attempt_t::none;
+  }
+  last_attempt = attempt_t::none;
+  return connect_attempt_t::fail;
+}
 
 bool take_received(uint8_t &b) {
   if (!rx_pending) {

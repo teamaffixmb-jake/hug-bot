@@ -50,6 +50,20 @@ void apply_receive() {
   }
 }
 
+void take_inbox() {
+  uint8_t b = 0;
+  if (!mqtt::take_received(b)) {
+    return;
+  }
+  const int32_t before = pending;
+  apply_receive();
+  if (pending != before) {
+    persist();
+  }
+  oled_ui::on_receive();
+  log::warn("Hug received");
+}
+
 }  // namespace
 
 void setup() {
@@ -62,24 +76,23 @@ void setup() {
 }
 
 void loop() {
-  const uint32_t now = millis();
-  if (polled && (now - last_poll_ms) < k_poll_ms) {
+  if (mqtt::connected()) {
+    const uint32_t now = millis();
+    if (polled && (now - last_poll_ms) < k_poll_ms) {
+      return;
+    }
+    polled = true;
+    last_poll_ms = now;
+    mqtt::loop();
+    take_inbox();
     return;
   }
-  polled = true;
-  last_poll_ms = now;
 
-  mqtt::loop();
-  uint8_t b = 0;
-  if (mqtt::take_received(b)) {
-    const int32_t before = pending;
-    apply_receive();
-    if (pending != before) {
-      persist();
-    }
-    oled_ui::on_receive();
-    log::warn("Hug received");
+  if (!oled_ui::on_mqtt_connecting()) {
+    return;
   }
+  mqtt::loop();
+  take_inbox();
 }
 
 void pause() { mqtt::stop(); }

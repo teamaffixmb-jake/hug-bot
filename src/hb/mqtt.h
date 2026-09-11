@@ -39,6 +39,10 @@ void loop();
 void stop();
 bool connected();
 
+// Last try_connect outcome. Cleared on read.
+enum class connect_attempt_t : uint8_t { none, fail };
+connect_attempt_t take_connect_attempt();
+
 // Publishes a one-byte hug to the peer inbox.
 bool publish_hug();
 

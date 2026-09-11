@@ -27,8 +27,8 @@ void main_entry_setup() {
 void main_entry_loop() {
   input::loop();
   sta::loop();
-  mode::loop();
   oled_ui::loop();
+  mode::loop();
 }
 
 }  // namespace hb
