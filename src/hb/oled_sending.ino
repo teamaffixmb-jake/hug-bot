@@ -32,7 +32,10 @@ void draw_heart(int16_t hx, int16_t hy) {
 
 }  // namespace
 
-void setup() { tick = 0; }
+void setup() {
+  tick = 0;
+  last_ms = 0;
+}
 
 void loop() {
   if (!oled::ready()) {

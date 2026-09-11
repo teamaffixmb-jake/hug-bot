@@ -41,6 +41,7 @@ constexpr pose_t k_pose[k_poses] = {
 
 uint8_t frame = 0;
 uint32_t last_ms = 0;
+bool finished = false;
 
 int16_t mix(int16_t a, int16_t b, uint8_t num, uint8_t den) {
   return static_cast<int16_t>(a + ((static_cast<int32_t>(b - a) * num) / den));
@@ -101,7 +102,15 @@ void draw_figure(const pose_t &p) {
 
 }  // namespace
 
-void setup() { frame = 0; }
+void start() {
+  frame = 0;
+  last_ms = 0;
+  finished = false;
+}
+
+void setup() { start(); }
+
+bool done() { return finished; }
 
 void loop() {
   if (!oled::ready()) {
@@ -123,6 +132,9 @@ void loop() {
   oled::flush();
 
   frame = static_cast<uint8_t>((frame + 1) % (k_poses * 2));
+  if (frame == 0) {
+    finished = true;
+  }
 }
 
 }  // namespace oled_hug

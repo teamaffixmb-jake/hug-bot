@@ -2,6 +2,7 @@
 #include "cp.h"
 #include "hug.h"
 #include "log.h"
+#include "oled_ui.h"
 #include "pref.h"
 #include "wifi_vo.h"
 
@@ -25,10 +26,12 @@ void enter(slot_t slot) {
     // Inbox hugs while the AP is up are dropped (QoS 0, client not
     // pumping). Do not leave MQTT running under the AP.
     hug::pause();
+    oled_ui::stop();
     cp::enable();
     return;
   }
   cp::disable();
+  oled_ui::resume();
 }
 
 }  // namespace
