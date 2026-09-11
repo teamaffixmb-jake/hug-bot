@@ -8,7 +8,7 @@
 // 7 = OLED "hug sent!" fly-by
 // 8 = OLED hug-sending loader
 // 9 = OLED "N missed hugs" pulse
-#define RUN_MODE 9
+#define RUN_MODE 0
 
 #include "main.h"
 #include "test.h"

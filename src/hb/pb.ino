@@ -6,7 +6,7 @@ namespace hb {
 namespace pb {
 namespace {
 
-constexpr uint8_t k_pin = A3;
+constexpr uint8_t k_pin = A1;
 
 }  // namespace
 

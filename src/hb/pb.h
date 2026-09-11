@@ -4,7 +4,7 @@
 namespace hb {
 namespace pb {
 
-// Push button on A3. Wired to GND; pin uses the internal pull-up.
+// Push button on A1. Wired to GND; pin uses the internal pull-up.
 // down() is true while the button is held.
 void setup();
 bool down();
