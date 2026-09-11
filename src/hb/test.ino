@@ -5,6 +5,7 @@
 #include "test_mqtt_tx.h"
 #include "test_oled.h"
 #include "test_oled_hug.h"
+#include "test_oled_missed.h"
 #include "test_oled_sending.h"
 #include "test_oled_sent.h"
 #include "test_pb.h"
@@ -28,6 +29,8 @@ void test_entry_setup() {
   test_oled_sent::setup();
 #elif RUN_MODE == 8
   test_oled_sending::setup();
+#elif RUN_MODE == 9
+  test_oled_missed::setup();
 #else
   log::error("Unknown RUN_MODE");
 #endif
@@ -50,6 +53,8 @@ void test_entry_loop() {
   test_oled_sent::loop();
 #elif RUN_MODE == 8
   test_oled_sending::loop();
+#elif RUN_MODE == 9
+  test_oled_missed::loop();
 #endif
 }
 

@@ -7,7 +7,8 @@
 // 6 = OLED stick-figure hug animation
 // 7 = OLED "hug sent!" fly-by
 // 8 = OLED hug-sending loader
-#define RUN_MODE 8
+// 9 = OLED "N missed hugs" pulse
+#define RUN_MODE 9
 
 #include "main.h"
 #include "test.h"
