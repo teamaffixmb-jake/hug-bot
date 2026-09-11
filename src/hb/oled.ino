@@ -116,5 +116,39 @@ void print_at(int16_t x, int16_t y, uint8_t size, const char *text) {
   panel->print(text);
 }
 
+void pixel(int16_t x, int16_t y) {
+  if (started) {
+    panel->drawPixel(x, y, SSD1306_WHITE);
+  }
+}
+
+void line(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
+  if (started) {
+    panel->drawLine(x0, y0, x1, y1, SSD1306_WHITE);
+  }
+}
+
+void rect(int16_t x, int16_t y, int16_t w, int16_t h, bool fill) {
+  if (!started) {
+    return;
+  }
+  if (fill) {
+    panel->fillRect(x, y, w, h, SSD1306_WHITE);
+  } else {
+    panel->drawRect(x, y, w, h, SSD1306_WHITE);
+  }
+}
+
+void circle(int16_t x, int16_t y, int16_t r, bool fill) {
+  if (!started) {
+    return;
+  }
+  if (fill) {
+    panel->fillCircle(x, y, r, SSD1306_WHITE);
+  } else {
+    panel->drawCircle(x, y, r, SSD1306_WHITE);
+  }
+}
+
 }  // namespace oled
 }  // namespace hb

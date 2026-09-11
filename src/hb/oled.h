@@ -23,6 +23,10 @@ void flush();
 void set_contrast(uint8_t level);
 void invert(bool on);
 void print_at(int16_t x, int16_t y, uint8_t size, const char *text);
+void pixel(int16_t x, int16_t y);
+void line(int16_t x0, int16_t y0, int16_t x1, int16_t y1);
+void rect(int16_t x, int16_t y, int16_t w, int16_t h, bool fill);
+void circle(int16_t x, int16_t y, int16_t r, bool fill);
 
 }  // namespace oled
 }  // namespace hb

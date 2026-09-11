@@ -3,8 +3,9 @@
 // 2 = MQTT tx to hugbot/<id>/test-tx every 15s
 // 3 = pb held: log every 100ms
 // 4 = MQTT rx on hugbot/<id>/test-rx
-// 5 = OLED Adafruit SSD1306 I2C "Hello!"
-#define RUN_MODE 5
+// 5 = OLED I2C "Hello!"
+// 6 = OLED stick-figure hug animation
+#define RUN_MODE 6
 
 #include "main.h"
 #include "test.h"
