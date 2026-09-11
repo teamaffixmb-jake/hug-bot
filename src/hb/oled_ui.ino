@@ -28,6 +28,7 @@ constexpr uint32_t k_dance_wait_ms = 30000;
 constexpr uint32_t k_send_loader_ms = 1500;
 constexpr uint32_t k_missed_wait_ms = 60000;
 constexpr int32_t k_missed_grace = -6;
+constexpr uint8_t k_hug_loops = 5;
 
 state_t state = state_t::stopped;
 bool portal_shown = false;
@@ -35,6 +36,7 @@ bool missed_armed = false;
 uint32_t missed_start = 0;
 uint32_t idle_entered_ms = 0;
 uint32_t send_started = 0;
+uint8_t hug_loops_left = 0;
 
 void sync_miss_timer() {
   const int32_t p = hug::pending_for_display();
@@ -148,6 +150,7 @@ void on_receive() {
   }
   refresh_missed_count();
   oled_hug::start();
+  hug_loops_left = k_hug_loops;
   state = state_t::received;
 }
 
@@ -199,7 +202,12 @@ void loop() {
   case state_t::received:
     oled_hug::loop();
     if (oled_hug::done()) {
-      go_rest();
+      hug_loops_left = static_cast<uint8_t>(hug_loops_left - 1);
+      if (hug_loops_left > 0) {
+        oled_hug::start();
+      } else {
+        go_rest();
+      }
     }
     break;
 
