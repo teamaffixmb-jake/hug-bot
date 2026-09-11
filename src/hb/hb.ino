@@ -3,7 +3,8 @@
 // 2 = MQTT tx to hugbot/<id>/test-tx every 15s
 // 3 = pb held: log every 100ms
 // 4 = MQTT rx on hugbot/<id>/test-rx
-#define RUN_MODE 0
+// 5 = OLED Adafruit SSD1306 I2C "Hello!"
+#define RUN_MODE 5
 
 #include "main.h"
 #include "test.h"
@@ -14,6 +15,7 @@ constexpr uint32_t k_serial_baud = 115200;
 
 void setup() {
   Serial.begin(k_serial_baud);
+  delay(2000);
 #if RUN_MODE == 0
   hb::main_entry_setup();
 #else

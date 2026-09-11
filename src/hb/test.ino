@@ -3,6 +3,7 @@
 #include "test_cp.h"
 #include "test_mqtt_rx.h"
 #include "test_mqtt_tx.h"
+#include "test_oled.h"
 #include "test_pb.h"
 
 namespace hb {
@@ -16,6 +17,8 @@ void test_entry_setup() {
   test_pb::setup();
 #elif RUN_MODE == 4
   test_mqtt_rx::setup();
+#elif RUN_MODE == 5
+  test_oled::setup();
 #else
   log::error("Unknown RUN_MODE");
 #endif
@@ -30,6 +33,8 @@ void test_entry_loop() {
   test_pb::loop();
 #elif RUN_MODE == 4
   test_mqtt_rx::loop();
+#elif RUN_MODE == 5
+  test_oled::loop();
 #endif
 }
 
