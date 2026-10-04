@@ -15,7 +15,7 @@ constexpr char k_device_b_token[] = "";
 }  // namespace hb
 #endif
 
-#define HB_DEVICE_B 0
+#define HB_DEVICE_B 1
 
 namespace hb {
 namespace mqtt {

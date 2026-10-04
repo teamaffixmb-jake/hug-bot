@@ -6,6 +6,7 @@
 #include "oled_hug.h"
 #include "oled_missed.h"
 #include "oled_net.h"
+#include "oled_pending.h"
 #include "oled_sending.h"
 #include "oled_sent.h"
 #include "sta.h"
@@ -25,6 +26,7 @@ enum class state_t : uint8_t {
   sent,
   received,
   missed,
+  pending,
   stopped,
   wifiWait,
   wifiOk,
@@ -36,47 +38,29 @@ enum class state_t : uint8_t {
 
 constexpr uint32_t k_dance_wait_ms = 30000;
 constexpr uint32_t k_send_loader_ms = 1500;
-constexpr uint32_t k_missed_wait_ms = 60000;
 constexpr uint32_t k_wifi_hold_ms = 2000;
-constexpr int32_t k_missed_grace = -6;
 constexpr uint8_t k_hug_loops = 5;
 
 state_t state = state_t::stopped;
 bool portal_shown = false;
 bool boot_movie = true;
-bool missed_armed = false;
-uint32_t missed_start = 0;
 uint32_t idle_entered_ms = 0;
 uint32_t send_started = 0;
 uint8_t hug_loops_left = 0;
 bool hold_armed = false;
 uint32_t hold_start = 0;
 
-void sync_miss_timer() {
-  const int32_t p = hug::pending_for_display();
-  if (p >= 0) {
-    missed_armed = false;
-  } else if (!missed_armed) {
-    missed_armed = true;
-    missed_start = millis();
-  }
-}
-
-bool missed_eligible() {
-  const int32_t p = hug::pending_for_display();
-  if (p > k_missed_grace) {
-    return false;
-  }
-  if (!missed_armed) {
-    return false;
-  }
-  return (millis() - missed_start) >= k_missed_wait_ms;
-}
-
 void refresh_missed_count() {
   const int32_t p = hug::pending_for_display();
   if (p < 0) {
     oled_missed::set_count(static_cast<uint32_t>(-p));
+  }
+}
+
+void refresh_pending_count() {
+  const int32_t p = hug::pending_for_display();
+  if (p > 0) {
+    oled_pending::set_count(static_cast<uint32_t>(p));
   }
 }
 
@@ -114,10 +98,21 @@ void enter_missed() {
   state = state_t::missed;
 }
 
+void enter_pending() {
+  refresh_pending_count();
+  oled_pending::setup();
+  state = state_t::pending;
+}
+
 void go_rest() {
   disarm_hold();
-  if (missed_eligible()) {
+  const int32_t p = hug::pending_for_display();
+  if (p < 0) {
     enter_missed();
+    return;
+  }
+  if (p > 0) {
+    enter_pending();
     return;
   }
   if (state != state_t::idle) {
@@ -188,7 +183,6 @@ bool wifi_clip() {
 }
 
 void leave_stopped() {
-  sync_miss_timer();
   if (boot_movie) {
     if (!sta_up()) {
       boot_movie = false;
@@ -266,7 +260,6 @@ void on_send() {
     return;
   }
   boot_movie = false;
-  sync_miss_timer();
   if (hug_clip()) {
     return;
   }
@@ -284,7 +277,6 @@ void on_receive() {
     return;
   }
   boot_movie = false;
-  sync_miss_timer();
   if (!oled::ready()) {
     return;
   }
@@ -321,9 +313,14 @@ void loop() {
   const uint32_t now = millis();
 
   switch (state) {
-  case state_t::idle:
-    if (missed_eligible()) {
+  case state_t::idle: {
+    const int32_t p = hug::pending_for_display();
+    if (p < 0) {
       enter_missed();
+      break;
+    }
+    if (p > 0) {
+      enter_pending();
       break;
     }
     poll_rest_radio();
@@ -335,6 +332,7 @@ void loop() {
       state = state_t::dance;
     }
     break;
+  }
 
   case state_t::dance:
     poll_rest_radio();
@@ -374,7 +372,7 @@ void loop() {
     }
     break;
 
-  case state_t::missed:
+  case state_t::missed: {
     if (!sta_up()) {
       enter_wifi_wait();
       break;
@@ -383,12 +381,34 @@ void loop() {
       enter_mqtt_wait();
       break;
     }
-    if (!missed_eligible()) {
+    const int32_t p = hug::pending_for_display();
+    if (p >= 0) {
       go_rest();
       break;
     }
+    refresh_missed_count();
     oled_missed::loop();
     break;
+  }
+
+  case state_t::pending: {
+    if (!sta_up()) {
+      enter_wifi_wait();
+      break;
+    }
+    if (!mqtt::connected()) {
+      enter_mqtt_wait();
+      break;
+    }
+    const int32_t p = hug::pending_for_display();
+    if (p <= 0) {
+      go_rest();
+      break;
+    }
+    refresh_pending_count();
+    oled_pending::loop();
+    break;
+  }
 
   case state_t::wifiWait:
     poll_wifi_wait();
