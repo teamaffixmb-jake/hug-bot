@@ -1,6 +1,6 @@
 #include "oled_ui.h"
 #include "hug.h"
-#include "mqtt.h"
+#include "api.h"
 #include "oled.h"
 #include "oled_dance.h"
 #include "oled_hug.h"
@@ -31,13 +31,16 @@ enum class state_t : uint8_t {
   wifiWait,
   wifiOk,
   wifiFail,
-  mqttWait,
-  mqttOk,
-  mqttFail,
+  awsWait,
+  awsOk,
+  awsFail,
 };
 
 constexpr uint32_t k_dance_wait_ms = 30000;
 constexpr uint32_t k_send_loader_ms = 1500;
+// "hug sent!" only plays once AWS has the hug. If it takes longer than this
+// the loader gives up; the press keeps retrying in the background.
+constexpr uint32_t k_send_give_up_ms = 15000;
 constexpr uint32_t k_wifi_hold_ms = 2000;
 constexpr uint8_t k_hug_loops = 5;
 
@@ -153,22 +156,22 @@ void enter_wifi_fail() {
   oled_net::loop();
 }
 
-void enter_mqtt_wait() {
+void enter_aws_wait() {
   disarm_hold();
-  oled_net::start(oled_net::kind_t::mqtt_wait);
-  state = state_t::mqttWait;
+  oled_net::start(oled_net::kind_t::aws_wait);
+  state = state_t::awsWait;
   oled_net::loop();
 }
 
-void enter_mqtt_ok() {
-  oled_net::start(oled_net::kind_t::mqtt_ok);
-  state = state_t::mqttOk;
+void enter_aws_ok() {
+  oled_net::start(oled_net::kind_t::aws_ok);
+  state = state_t::awsOk;
   oled_net::loop();
 }
 
-void enter_mqtt_fail() {
-  oled_net::start(oled_net::kind_t::mqtt_fail);
-  state = state_t::mqttFail;
+void enter_aws_fail() {
+  oled_net::start(oled_net::kind_t::aws_fail);
+  state = state_t::awsFail;
   oled_net::loop();
 }
 
@@ -193,12 +196,12 @@ void leave_stopped() {
     }
     return;
   }
-  if (mqtt::connected()) {
+  if (api::online()) {
     go_rest();
     return;
   }
   if (sta_up()) {
-    enter_mqtt_wait();
+    enter_aws_wait();
     return;
   }
   enter_wifi_wait();
@@ -227,8 +230,8 @@ void poll_rest_radio() {
     enter_wifi_wait();
     return;
   }
-  if (!mqtt::connected()) {
-    enter_mqtt_wait();
+  if (!api::online()) {
+    enter_aws_wait();
   }
 }
 
@@ -272,33 +275,36 @@ void on_send() {
   state = state_t::sending;
 }
 
-void on_receive() {
-  if (state == state_t::stopped) {
-    return;
+bool on_receive() {
+  // Only from rest, so a catch-up hug never cuts off the "connected" clip.
+  if (state != state_t::idle && state != state_t::dance &&
+      state != state_t::missed && state != state_t::pending) {
+    return false;
+  }
+  if (!oled::ready()) {
+    return false;
   }
   boot_movie = false;
-  if (!oled::ready()) {
-    return;
-  }
   disarm_hold();
   refresh_missed_count();
   oled_hug::start();
   hug_loops_left = k_hug_loops;
   state = state_t::received;
+  return true;
 }
 
-bool on_mqtt_connecting() {
-  if (state == state_t::mqttWait) {
+bool on_aws_connecting() {
+  if (state == state_t::awsWait) {
     return true;
   }
   if (state == state_t::stopped || hug_clip() || wifi_clip() ||
-      state == state_t::mqttOk || state == state_t::mqttFail) {
+      state == state_t::awsOk || state == state_t::awsFail) {
     return false;
   }
-  if (!sta_up() || mqtt::connected()) {
+  if (!sta_up() || api::online()) {
     return false;
   }
-  enter_mqtt_wait();
+  enter_aws_wait();
   return true;
 }
 
@@ -347,9 +353,14 @@ void loop() {
 
   case state_t::sending:
     oled_sending::loop();
-    if ((now - send_started) >= k_send_loader_ms) {
+    if ((now - send_started) < k_send_loader_ms) {
+      break;
+    }
+    if (hug::send_settled()) {
       oled_sent::start();
       state = state_t::sent;
+    } else if ((now - send_started) >= k_send_give_up_ms) {
+      go_rest();
     }
     break;
 
@@ -367,6 +378,7 @@ void loop() {
       if (hug_loops_left > 0) {
         oled_hug::start();
       } else {
+        hug::receive_shown();
         go_rest();
       }
     }
@@ -377,8 +389,8 @@ void loop() {
       enter_wifi_wait();
       break;
     }
-    if (!mqtt::connected()) {
-      enter_mqtt_wait();
+    if (!api::online()) {
+      enter_aws_wait();
       break;
     }
     const int32_t p = hug::pending_for_display();
@@ -396,8 +408,8 @@ void loop() {
       enter_wifi_wait();
       break;
     }
-    if (!mqtt::connected()) {
-      enter_mqtt_wait();
+    if (!api::online()) {
+      enter_aws_wait();
       break;
     }
     const int32_t p = hug::pending_for_display();
@@ -417,8 +429,8 @@ void loop() {
   case state_t::wifiOk:
     oled_net::loop();
     if (oled_net::done()) {
-      if (!mqtt::connected()) {
-        enter_mqtt_wait();
+      if (!api::online()) {
+        enter_aws_wait();
       } else {
         go_rest();
       }
@@ -436,22 +448,22 @@ void loop() {
     }
     break;
 
-  case state_t::mqttWait:
+  case state_t::awsWait:
     if (!sta_up()) {
       enter_wifi_wait();
       break;
     }
     oled_net::loop();
-    if (mqtt::connected()) {
-      enter_mqtt_ok();
+    if (api::online()) {
+      enter_aws_ok();
       break;
     }
-    if (mqtt::take_connect_attempt() == mqtt::connect_attempt_t::fail) {
-      enter_mqtt_fail();
+    if (api::take_connect_attempt() == api::connect_attempt_t::fail) {
+      enter_aws_fail();
     }
     break;
 
-  case state_t::mqttOk:
+  case state_t::awsOk:
     if (!sta_up()) {
       enter_wifi_wait();
       break;
@@ -462,14 +474,14 @@ void loop() {
     }
     break;
 
-  case state_t::mqttFail:
+  case state_t::awsFail:
     if (!sta_up()) {
       enter_wifi_wait();
       break;
     }
     oled_net::loop();
     if (oled_net::done()) {
-      enter_mqtt_wait();
+      enter_aws_wait();
     }
     break;
 

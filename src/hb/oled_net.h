@@ -8,9 +8,9 @@ enum class kind_t {
   wifi_wait,
   wifi_ok,
   wifi_fail,
-  mqtt_wait,
-  mqtt_ok,
-  mqtt_fail
+  aws_wait,
+  aws_ok,
+  aws_fail
 };
 
 void start(kind_t kind);

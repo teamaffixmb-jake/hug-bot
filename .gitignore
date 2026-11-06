@@ -1,2 +1,2 @@
-# Per-board MQTT identity and password. Copy from src/hb/secrets.h.example.
+# Per-board API host and tokens. Copy from src/hb/secrets.h.example.
 **/secrets.h

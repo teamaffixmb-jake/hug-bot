@@ -12,7 +12,6 @@ constexpr char k_wifi_ssid_key[] = "wifi_ssid";
 constexpr char k_wifi_psk_key[] = "wifi_psk";
 constexpr char k_volume_key[] = "volume";
 constexpr char k_mode_key[] = "mode";
-constexpr char k_pending_key[] = "pending";
 constexpr uint8_t k_volume_default = 80;
 constexpr uint8_t k_mode_default = 0;
 constexpr uint8_t k_mode_max = 1;
@@ -89,25 +88,6 @@ bool set_mode(uint8_t mode) {
   Preferences prefs;
   prefs.begin(k_namespace, false);
   const size_t written = prefs.putUChar(k_mode_key, mode);
-  prefs.end();
-  return written > 0;
-}
-
-int32_t get_pending() {
-  Preferences prefs;
-  prefs.begin(k_namespace, true);
-  const int32_t pending = prefs.getInt(k_pending_key, 0);
-  prefs.end();
-  return pending;
-}
-
-bool set_pending(int32_t pending) {
-  if (get_pending() == pending) {
-    return true;
-  }
-  Preferences prefs;
-  prefs.begin(k_namespace, false);
-  const size_t written = prefs.putInt(k_pending_key, pending);
   prefs.end();
   return written > 0;
 }

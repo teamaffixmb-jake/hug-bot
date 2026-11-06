@@ -1,115 +1,112 @@
 #include "hug.h"
+#include "api.h"
 #include "log.h"
-#include "mqtt.h"
+#include "oled.h"
 #include "oled_ui.h"
-#include "pref.h"
 
 #include <Arduino.h>
 #include <cstdint>
+
+// All hug state lives on AWS (infra/hug-bot.yaml); this module only turns
+// what the API last said into animations. Nothing is stored on the board,
+// so there is no second copy to drift.
 
 namespace hb {
 namespace hug {
 namespace {
 
-constexpr uint32_t k_poll_ms = 3000;
-constexpr int32_t k_pending_cap = 999;
+constexpr int32_t k_display_cap = 999;
 
-uint32_t last_poll_ms = 0;
-bool polled = false;
-int32_t pending = 0;
+bool showing = false;
+uint32_t showing_through = 0;
+// Received count already animated this boot. AWS's seen count lags until our
+// mark_seen lands, so this stops the animation replaying meanwhile.
+uint32_t shown_through = 0;
+bool was_online = false;
 
-int32_t clamp_pending(int32_t value) {
-  if (value > k_pending_cap) {
-    return k_pending_cap;
-  }
-  if (value < -k_pending_cap) {
-    return -k_pending_cap;
-  }
-  return value;
-}
-
-void persist() {
-  if (!pref::set_pending(pending)) {
-    log::error("Pending persist failed");
-  }
-}
-
-void apply_send() {
-  if (pending < 0) {
-    pending = 0;
-  } else if (pending < k_pending_cap) {
-    pending = pending + 1;
-  }
-}
-
-void apply_receive() {
-  if (pending > 0) {
-    pending = 0;
-  } else if (pending > -k_pending_cap) {
-    pending = pending - 1;
-  }
-}
-
-void take_inbox() {
-  uint8_t b = 0;
-  if (!mqtt::take_received(b)) {
+void deliver_received(const api::view_t &v) {
+  if (!v.valid || showing) {
     return;
   }
-  const int32_t before = pending;
-  apply_receive();
-  if (pending != before) {
-    persist();
+  const uint32_t done = v.seen > shown_through ? v.seen : shown_through;
+  if (v.received <= done) {
+    return;
   }
-  oled_ui::on_receive();
+  if (!oled::ready()) {
+    shown_through = v.received;
+    api::mark_seen(v.received);
+    return;
+  }
+  if (!oled_ui::on_receive()) {
+    return;
+  }
+  showing = true;
+  showing_through = v.received;
   log::warn("Hug received");
 }
 
 }  // namespace
 
 void setup() {
-  mqtt::setup();
-  const int32_t stored = pref::get_pending();
-  pending = clamp_pending(stored);
-  if (pending != stored) {
-    persist();
+  if (api::k_host[0] == '\0' || api::k_token[0] == '\0') {
+    log::error("API secrets.h missing");
   }
+  api::setup();
 }
 
 void loop() {
-  if (mqtt::connected()) {
-    const uint32_t now = millis();
-    if (polled && (now - last_poll_ms) < k_poll_ms) {
-      return;
-    }
-    polled = true;
-    last_poll_ms = now;
-    mqtt::loop();
-    take_inbox();
+  api::start();
+  const bool up = api::online();
+  if (up != was_online) {
+    was_online = up;
+    log::warn(up ? "AWS online" : "AWS offline");
+  }
+  if (!up) {
+    oled_ui::on_aws_connecting();
     return;
   }
-
-  if (!oled_ui::on_mqtt_connecting()) {
-    return;
-  }
-  mqtt::loop();
-  take_inbox();
+  deliver_received(api::view());
 }
 
-void pause() { mqtt::stop(); }
+void pause() {
+  api::stop();
+  // An interrupted animation was never marked seen, so it replays on resume.
+  showing = false;
+}
 
 void send() {
-  if (!mqtt::publish_hug()) {
+  if (!api::send_hug()) {
+    log::warn("Hug not sent (offline)");
     return;
   }
-  const int32_t before = pending;
-  apply_send();
-  if (pending != before) {
-    persist();
-  }
+  log::warn("Hug sent");
   oled_ui::on_send();
 }
 
-int32_t pending_for_display() { return pending; }
+bool send_settled() { return api::hugs_in_flight() == 0; }
+
+void receive_shown() {
+  if (!showing) {
+    return;
+  }
+  showing = false;
+  shown_through = showing_through;
+  api::mark_seen(showing_through);
+}
+
+int32_t pending_for_display() {
+  const api::view_t v = api::view();
+  if (!v.valid) {
+    return 0;
+  }
+  if (v.pending > k_display_cap) {
+    return k_display_cap;
+  }
+  if (v.pending < -k_display_cap) {
+    return -k_display_cap;
+  }
+  return v.pending;
+}
 
 }  // namespace hug
 }  // namespace hb

@@ -13,7 +13,8 @@ namespace pref {
 //   wifi_psk   station PSK   (wifi_t::psk, empty = open network)
 //   volume     0..100
 //   mode       0 = hug ops, 1 = captive portal (other values clamp to 0)
-//   pending    signed hug register (RAM owner clamps to ±999)
+// Hug counts live on AWS, not here. Boards flashed with older firmware may
+// still hold an unused "pending" key; nothing reads it.
 
 // Returns false if no station SSID is stored.
 bool get_wifi(wifi_t &out);
@@ -27,10 +28,6 @@ void set_volume(uint8_t volume);
 uint8_t get_mode();
 // Returns false if the NVS write failed. No-op if already stored.
 bool set_mode(uint8_t mode);
-
-int32_t get_pending();
-// Returns false if the NVS write failed. No-op if already stored.
-bool set_pending(int32_t pending);
 
 }  // namespace pref
 }  // namespace hb

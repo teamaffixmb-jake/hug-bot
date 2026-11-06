@@ -1,8 +1,8 @@
-#ifndef HUG_BOT_MQTT_CA_H
-#define HUG_BOT_MQTT_CA_H
+#ifndef HUG_BOT_API_CA_H
+#define HUG_BOT_API_CA_H
 
 namespace hb {
-namespace mqtt {
+namespace api {
 
 // Amazon Root CA 1. Public trust anchor, not a secret.
 // https://www.amazontrust.com/repository/AmazonRootCA1.pem
@@ -28,7 +28,7 @@ constexpr char k_amazon_root_ca1[] =
     "rqXRfboQnoZsG4q5WTP468SQvvG5\n"
     "-----END CERTIFICATE-----\n";
 
-}  // namespace mqtt
+}  // namespace api
 }  // namespace hb
 
-#endif  // HUG_BOT_MQTT_CA_H
+#endif  // HUG_BOT_API_CA_H

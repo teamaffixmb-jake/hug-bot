@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Hug-Bot backend. One DynamoDB item holds the whole hug state for both
+  boards, and one Lambda (behind a function URL) is the only thing that reads
+  or changes it. The boards are just views: they poll it and send button
+  presses. Cost at hug-bot scale is well under a dollar a month.
+
+# Deploy:
+#   TOKEN_A=$(openssl rand -hex 16)
+#   TOKEN_B=$(openssl rand -hex 16)
+#   aws cloudformation deploy \
+#     --stack-name hug-bot \
+#     --template-file infra/hug-bot.yaml \
+#     --capabilities CAPABILITY_IAM \
+#     --parameter-overrides DeviceAToken="$TOKEN_A" DeviceBToken="$TOKEN_B"
+#
+# Then:
+#   aws cloudformation describe-stacks --stack-name hug-bot \
+#     --query 'Stacks[0].Outputs'
+#
+# API (every call is a POST with "Authorization: Bearer <token>"; the token
+# says which board is calling):
+#   /state            body empty
+#   /hug              body = request id, unique per press ("<boot>-<seq>")
+#   /seen             body = received count the board finished animating
+# Every reply is one line, from the caller's point of view:
+#   "ok <pending> <received> <seen>"
+#   pending   >0 my hugs not answered yet, <0 their hugs I have not answered
+#   received  hugs the other board has ever sent me
+#   seen      how many of those I have already animated
+#
+# The rules (same as the old on-board logic, now in one place):
+#   sending while I owe hugs (pending < 0) answers them all: pending = 0
+#   otherwise it is one more unanswered hug:                  pending += 1
+# The balance is a single number stored once, so the boards cannot disagree.
+# Writes are compare-and-swap on a version number, so two presses at the same
+# moment are applied one after the other. A retried /hug with the same id is
+# applied once.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Devices
+        Parameters:
+          - DeviceAToken
+          - DeviceBToken
+
+Parameters:
+  DeviceAToken:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9._~-]+$"
+    ConstraintDescription: 16–64 URL-safe characters
+    Description: Secret for board A. Generate with openssl rand -hex 16.
+
+  DeviceBToken:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9._~-]+$"
+    ConstraintDescription: 16–64 URL-safe characters
+    Description: Secret for board B. Generate with openssl rand -hex 16.
+
+Rules:
+  DistinctTokens:
+    Assertions:
+      - Assert: !Not [!Equals [!Ref DeviceAToken, !Ref DeviceBToken]]
+        AssertDescription: DeviceAToken and DeviceBToken must be different.
+
+Resources:
+  HugTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-api"
+      RetentionInDays: 7
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: hug-table
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt HugTable.Arn
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: ApiLogGroup
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-api"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt ApiRole.Arn
+      Timeout: 5
+      MemorySize: 128
+      # Two boards polling every 5 s is ~1M calls a month; WARN keeps the
+      # per-call START/END/REPORT lines out of CloudWatch.
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: WARN
+        SystemLogLevel: WARN
+      Environment:
+        Variables:
+          TABLE: !Ref HugTable
+          DEVICE_A_TOKEN: !Ref DeviceAToken
+          DEVICE_B_TOKEN: !Ref DeviceBToken
+      Code:
+        ZipFile: |
+          import base64, hmac, os, re
+          import boto3
+
+          db = boto3.client("dynamodb")
+          TABLE = os.environ["TABLE"]
+          TOKENS = {"a": os.environ["DEVICE_A_TOKEN"], "b": os.environ["DEVICE_B_TOKEN"]}
+          NUMS = ("ver", "bal", "a_sent", "b_sent", "a_seen", "b_seen")
+          KEY = {"pk": {"S": "pair"}}
+          ID_RE = re.compile(r"^[A-Za-z0-9-]{1,40}$")
+
+          # bal is from board A's point of view: >0 A is waiting on B,
+          # <0 B is waiting on A. Board B sees -bal.
+
+          def who(event):
+              h = event.get("headers") or {}
+              auth = h.get("authorization") or ""
+              tok = auth[7:] if auth.startswith("Bearer ") else ""
+              for dev, t in TOKENS.items():
+                  if hmac.compare_digest(tok.encode(), t.encode()):
+                      return dev
+              return None
+
+          def load():
+              it = db.get_item(TableName=TABLE, Key=KEY, ConsistentRead=True).get("Item", {})
+              s = {k: int(it[k]["N"]) if k in it else 0 for k in NUMS}
+              s["a_last"] = it.get("a_last", {}).get("S", "")
+              s["b_last"] = it.get("b_last", {}).get("S", "")
+              return s
+
+          def save(s):
+              item = dict(KEY)
+              for k in NUMS:
+                  item[k] = {"N": str(s[k] + 1 if k == "ver" else s[k])}
+              item["a_last"] = {"S": s["a_last"]}
+              item["b_last"] = {"S": s["b_last"]}
+              if s["ver"] == 0:
+                  db.put_item(TableName=TABLE, Item=item,
+                              ConditionExpression="attribute_not_exists(pk)")
+              else:
+                  db.put_item(TableName=TABLE, Item=item,
+                              ConditionExpression="ver = :v",
+                              ExpressionAttributeValues={":v": {"N": str(s["ver"])}})
+
+          def mine(s, me):
+              return s["bal"] if me == "a" else -s["bal"]
+
+          def apply_hug(s, me, rid):
+              if s[me + "_last"] == rid:
+                  return False  # retry of a press we already counted
+              p = mine(s, me)
+              p = 0 if p < 0 else p + 1
+              s["bal"] = p if me == "a" else -p
+              s[me + "_sent"] += 1
+              s[me + "_last"] = rid
+              return True
+
+          def apply_seen(s, me, through):
+              peer = "b" if me == "a" else "a"
+              through = min(through, s[peer + "_sent"])
+              if through <= s[me + "_seen"]:
+                  return False
+              s[me + "_seen"] = through
+              return True
+
+          def reply(code, text):
+              return {"statusCode": code, "headers": {"content-type": "text/plain"},
+                      "body": text + "\n"}
+
+          def handler(event, _ctx):
+              me = who(event)
+              if me is None:
+                  return reply(401, "denied")
+              body = event.get("body") or ""
+              if event.get("isBase64Encoded"):
+                  body = base64.b64decode(body).decode(errors="replace")
+              body = body.strip()
+              path = event.get("rawPath") or "/"
+              if path == "/hug":
+                  if not ID_RE.match(body):
+                      return reply(400, "bad id")
+                  op = lambda s: apply_hug(s, me, body)
+              elif path == "/seen":
+                  if not body.isdigit():
+                      return reply(400, "bad count")
+                  op = lambda s: apply_seen(s, me, int(body))
+              elif path == "/state":
+                  op = lambda s: False
+              else:
+                  return reply(404, "unknown")
+
+              for _ in range(10):
+                  s = load()
+                  if not op(s):
+                      break
+                  try:
+                      save(s)
+                      break
+                  except db.exceptions.ConditionalCheckFailedException:
+                      continue  # the other board wrote first; redo on its result
+              else:
+                  return reply(503, "busy")
+
+              peer = "b" if me == "a" else "a"
+              return reply(200, f"ok {mine(s, me)} {s[peer + '_sent']} {s[me + '_seen']}")
+
+  ApiUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt ApiFunction.Arn
+      AuthType: NONE
+
+  # A public URL needs both permissions (the second since October 2025).
+  # The bearer token in the Lambda is the real gate.
+  ApiUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+Outputs:
+  ApiHost:
+    Description: Host name for src/hb/secrets.h (k_host).
+    Value: !Select [0, !Split ["/", !Select [1, !Split ["https://", !GetAtt ApiUrl.FunctionUrl]]]]
+
+  HugTable:
+    Description: DynamoDB table holding the single "pair" item.
+    Value: !Ref HugTable

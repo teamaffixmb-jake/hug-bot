@@ -22,7 +22,7 @@ bool oneshot = false;
 
 bool is_oneshot(kind_t k) {
   return k == kind_t::wifi_ok || k == kind_t::wifi_fail ||
-         k == kind_t::mqtt_ok || k == kind_t::mqtt_fail;
+         k == kind_t::aws_ok || k == kind_t::aws_fail;
 }
 
 const char *label() {
@@ -33,12 +33,12 @@ const char *label() {
     return "wifi ok";
   case kind_t::wifi_fail:
     return "wifi failed";
-  case kind_t::mqtt_wait:
-    return "mqtt...";
-  case kind_t::mqtt_ok:
-    return "mqtt ok";
-  case kind_t::mqtt_fail:
-    return "mqtt failed";
+  case kind_t::aws_wait:
+    return "aws...";
+  case kind_t::aws_ok:
+    return "aws ok";
+  case kind_t::aws_fail:
+    return "aws failed";
   }
   return "";
 }
@@ -115,13 +115,13 @@ void draw() {
     draw_wifi(1);
     draw_x();
     break;
-  case kind_t::mqtt_wait:
+  case kind_t::aws_wait:
     draw_lock((frame & 1) == 0);
     break;
-  case kind_t::mqtt_ok:
+  case kind_t::aws_ok:
     draw_lock(true);
     break;
-  case kind_t::mqtt_fail:
+  case kind_t::aws_fail:
     draw_lock(false);
     draw_x();
     break;
