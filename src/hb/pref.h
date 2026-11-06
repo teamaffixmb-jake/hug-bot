@@ -13,6 +13,8 @@ namespace pref {
 //   wifi_psk   station PSK   (wifi_t::psk, empty = open network)
 //   volume     0..100
 //   mode       0 = hug ops, 1 = captive portal (other values clamp to 0)
+// Hug counts live on AWS, not here. Boards flashed with older firmware may
+// still hold an unused "pending" key; nothing reads it.
 
 // Returns false if no station SSID is stored.
 bool get_wifi(wifi_t &out);

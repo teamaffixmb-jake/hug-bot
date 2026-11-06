@@ -2,6 +2,7 @@
 #include "cp.h"
 #include "hug.h"
 #include "log.h"
+#include "oled_ui.h"
 #include "pref.h"
 #include "wifi_vo.h"
 
@@ -22,13 +23,15 @@ slot_t clamp_slot(uint8_t slot) {
 
 void enter(slot_t slot) {
   if (slot == slot_t::portal) {
-    // Inbox hugs while the AP is up are dropped (QoS 0, client not
-    // pumping). Do not leave MQTT running under the AP.
+    // Peer hugs meanwhile wait on AWS and show on resume. Do not leave
+    // API requests running under the AP.
     hug::pause();
+    oled_ui::stop();
     cp::enable();
     return;
   }
   cp::disable();
+  oled_ui::resume();
 }
 
 }  // namespace

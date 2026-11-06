@@ -1,8 +1,8 @@
 // 0 = production (main_entry)
 // 1 = cp toggle every 60s
-// 2 = MQTT tx to hugbot/<id>/test-tx every 15s
+// 2 = API: log the hug state from AWS every 5s
 // 3 = pb held: log every 100ms
-// 4 = MQTT rx on hugbot/<id>/test-rx
+// 4 = (unused; was MQTT rx)
 // 5 = OLED I2C "Hello!"
 // 6 = OLED stick-figure hug animation
 // 7 = OLED "hug sent!" fly-by

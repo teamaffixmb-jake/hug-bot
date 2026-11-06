@@ -7,6 +7,8 @@ namespace oled_sent {
 // "hug sent!" and a heart fly across the panel.
 void setup();
 void loop();
+void start();
+bool done();
 
 }  // namespace oled_sent
 }  // namespace hb

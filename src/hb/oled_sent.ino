@@ -16,6 +16,7 @@ constexpr int16_t k_y = 24;
 
 int16_t x = k_start_x;
 uint32_t last_ms = 0;
+bool finished = false;
 
 void draw_heart(int16_t hx, int16_t hy) {
   oled::circle(static_cast<int16_t>(hx - 4), hy, 4, true);
@@ -33,7 +34,15 @@ void draw_heart(int16_t hx, int16_t hy) {
 
 }  // namespace
 
-void setup() { x = k_start_x; }
+void start() {
+  x = k_start_x;
+  last_ms = 0;
+  finished = false;
+}
+
+void setup() { start(); }
+
+bool done() { return finished; }
 
 void loop() {
   if (!oled::ready()) {
@@ -54,6 +63,7 @@ void loop() {
   x = static_cast<int16_t>(x - 4);
   if (x < k_end_x) {
     x = k_start_x;
+    finished = true;
   }
 }
 

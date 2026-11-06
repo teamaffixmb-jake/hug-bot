@@ -46,6 +46,7 @@ void draw(bool bigger) {
 void setup() {
   pulse = k_pulse_steps / 2;
   pulse_dir = 1;
+  last_ms = 0;
   format_num();
 }
 
